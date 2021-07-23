@@ -42,6 +42,7 @@ Steps:
 Warnings: 
     – Running this code can take up to 1 mins. 
     These figures are estimates based on a MacBook Pro 2017.
+    – ALL GVKEYS are randomized and may not be treated as a primary source of data. 
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
