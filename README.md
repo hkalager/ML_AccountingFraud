@@ -2,5 +2,12 @@
 
 This code repository is for a project to detect accounting frauds by using machine learning techniques. 
 
-The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (available at https://sites.google.com/usc.edu/aaerdataset/home). Terms of access from COMPUSTAT and AAER Dataset apply. We are prohibited from sharing the dataset. 
 
+Dataset:
+
+The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (available at https://sites.google.com/usc.edu/aaerdataset/home). Terms of access from COMPUSTAT and AAER Dataset apply. We are prohibited from disclosing the original dataset. ALL GVKEYS in this repository are randomized and may not be treated as a primary source of data.
+
+Third party resources:
+1) These scripts use free-to-access Python modules Numpy, Pandas, Statsmodels, Matplotlib, and Sklearn. Please make sure necessary modules are installed on your machine. 
+2) The script "rusboost.py" is from an anonymous online source and I adapted the code to match my programming style.
+3) The script "extra_codes.py" contains a function that was adapted from the Bao et al (2020) code repository at https://github.com/JarFraud/FraudDetection
