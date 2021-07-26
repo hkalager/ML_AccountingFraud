@@ -22,7 +22,7 @@ Expected columns are:
 
 Predictive models:
     – Support Vector Machines
-    – Logistic Regression (used in the original paper)
+    – Logistic Regression
     – SGD Tree Boosting
     – Adaptive Boosting with Logistic Regression
     – MUlti-layered Perceptron
@@ -225,7 +225,7 @@ else:
     opt_params_sgd={'class_weight': {0: 0.01, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
     score_sgd=0.7010985550937523
 
-    opt_params_ada={'learning_rate': 0.1, 'n_estimators': 100}
+    opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
     score_ada=0.700229450411913
     
     opt_params={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
@@ -572,7 +572,7 @@ for yr in range_oos:
     # Multi Layer Perceptron
     clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params['hidden_layer_sizes'], \
                           activation=opt_params['activation'],solver=opt_params['solver'],\
-                                       random_state=0,validation_fraction=.2)
+                                       random_state=0,validation_fraction=.1)
     clf_mlp=clf_mlp.fit(X,Y)
     probs_oos_fraud_mlp=clf_mlp.predict_proba(X_OOS)[:,-1]
     
@@ -784,104 +784,104 @@ print('total run time is '+str(dt_total.total_seconds())+' sec')
 
 perf_tbl_general=pd.DataFrame()
 perf_tbl_general['models']=['SVM','LR','SGD','ADA','MLP','FUSED']
-perf_tbl_general['Roc']=[np.mean(roc_svm[2:7]),np.mean(roc_lr[2:7]),\
-                         np.mean(roc_sgd[2:7]),\
-                             np.mean(roc_ada[2:7]),np.mean(roc_mlp[2:7]),np.mean(roc_fused[2:7])]
+perf_tbl_general['Roc']=[np.mean(roc_svm[2:8]),np.mean(roc_lr[2:8]),\
+                         np.mean(roc_sgd[2:8]),\
+                             np.mean(roc_ada[2:8]),np.mean(roc_mlp[2:8]),np.mean(roc_fused[2:8])]
 
                                             
-perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_svm1[2:7]),\
-                                 np.mean(sensitivity_OOS_lr1[2:7]),\
-                                     np.mean(sensitivity_OOS_sgd1[2:7]),\
-                                         np.mean(sensitivity_OOS_ada1[2:7]),\
-                                         np.mean(sensitivity_OOS_mlp1[2:7]),\
-                                             np.mean(sensitivity_OOS_fused1[2:7])]
+perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_svm1[2:8]),\
+                                 np.mean(sensitivity_OOS_lr1[2:8]),\
+                                     np.mean(sensitivity_OOS_sgd1[2:8]),\
+                                         np.mean(sensitivity_OOS_ada1[2:8]),\
+                                         np.mean(sensitivity_OOS_mlp1[2:8]),\
+                                             np.mean(sensitivity_OOS_fused1[2:8])]
 
-perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_svm1[2:7]),\
-                                 np.mean(specificity_OOS_lr1[2:7]),\
-                                     np.mean(specificity_OOS_sgd1[2:7]),\
-                                         np.mean(specificity_OOS_ada1[2:7]),\
-                                         np.mean(specificity_OOS_mlp1[2:7]),\
-                                             np.mean(specificity_OOS_fused1[2:7])]
+perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_svm1[2:8]),\
+                                 np.mean(specificity_OOS_lr1[2:8]),\
+                                     np.mean(specificity_OOS_sgd1[2:8]),\
+                                         np.mean(specificity_OOS_ada1[2:8]),\
+                                         np.mean(specificity_OOS_mlp1[2:8]),\
+                                             np.mean(specificity_OOS_fused1[2:8])]
 
-perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_svm1[2:7]),\
-                                 np.mean(precision_lr1[2:7]),\
-                                     np.mean(precision_sgd1[2:7]),\
-                                         np.mean(precision_ada1[2:7]),\
-                                         np.mean(precision_mlp1[2:7]),\
-                                             np.mean(precision_fused1[2:7])]
+perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_svm1[2:8]),\
+                                 np.mean(precision_lr1[2:8]),\
+                                     np.mean(precision_sgd1[2:8]),\
+                                         np.mean(precision_ada1[2:8]),\
+                                         np.mean(precision_mlp1[2:8]),\
+                                             np.mean(precision_fused1[2:8])]
 
 perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
                                       perf_tbl_general['Sensitivity @ 1 Prc'])/\
                                         ((perf_tbl_general['Precision @ 1 Prc']+\
                                           perf_tbl_general['Sensitivity @ 1 Prc']))
-perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1[2:7]),\
-                                 np.mean(ndcg_svm1[2:7]),\
-                                     np.mean(ndcg_sgd1[2:7]),np.mean(ndcg_ada1[2:7]),\
-                                         np.mean(ndcg_mlp1[2:7]),\
-                                             np.mean(ndcg_fused1[2:7])]   
+perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1[2:8]),\
+                                 np.mean(ndcg_svm1[2:8]),\
+                                     np.mean(ndcg_sgd1[2:8]),np.mean(ndcg_ada1[2:8]),\
+                                         np.mean(ndcg_mlp1[2:8]),\
+                                             np.mean(ndcg_fused1[2:8])]   
 
-perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_svm5[2:7]),\
-                                 np.mean(sensitivity_OOS_lr5[2:7]),\
-                                     np.mean(sensitivity_OOS_sgd5[2:7]),np.mean(sensitivity_OOS_ada5[2:7]),\
-                                         np.mean(sensitivity_OOS_mlp5[2:7]),\
-                                             np.mean(sensitivity_OOS_fused5[2:7])]
+perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_svm5[2:8]),\
+                                 np.mean(sensitivity_OOS_lr5[2:8]),\
+                                     np.mean(sensitivity_OOS_sgd5[2:8]),np.mean(sensitivity_OOS_ada5[2:8]),\
+                                         np.mean(sensitivity_OOS_mlp5[2:8]),\
+                                             np.mean(sensitivity_OOS_fused5[2:8])]
 
-perf_tbl_general['Specificity @ 5 Prc']=[np.mean(specificity_OOS_svm5[2:7]),\
-                                 np.mean(specificity_OOS_lr5[2:7]),\
-                                     np.mean(specificity_OOS_sgd5[2:7]),\
-                                         np.mean(specificity_OOS_ada5[2:7]),\
-                                         np.mean(specificity_OOS_mlp5[2:7]),\
-                                             np.mean(specificity_OOS_fused5[2:7])]
+perf_tbl_general['Specificity @ 5 Prc']=[np.mean(specificity_OOS_svm5[2:8]),\
+                                 np.mean(specificity_OOS_lr5[2:8]),\
+                                     np.mean(specificity_OOS_sgd5[2:8]),\
+                                         np.mean(specificity_OOS_ada5[2:8]),\
+                                         np.mean(specificity_OOS_mlp5[2:8]),\
+                                             np.mean(specificity_OOS_fused5[2:8])]
 
-perf_tbl_general['Precision @ 5 Prc']=[np.mean(precision_svm5[2:7]),\
-                                 np.mean(precision_lr5[2:7]),\
-                                     np.mean(precision_sgd5[2:7]),np.mean(precision_ada5[2:7]),\
-                                         np.mean(precision_mlp5[2:7]),\
-                                             np.mean(precision_fused5[2:7])]
+perf_tbl_general['Precision @ 5 Prc']=[np.mean(precision_svm5[2:8]),\
+                                 np.mean(precision_lr5[2:8]),\
+                                     np.mean(precision_sgd5[2:8]),np.mean(precision_ada5[2:8]),\
+                                         np.mean(precision_mlp5[2:8]),\
+                                             np.mean(precision_fused5[2:8])]
 
 perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
                                       perf_tbl_general['Sensitivity @ 5 Prc'])/\
                                         ((perf_tbl_general['Precision @ 5 Prc']+\
                                           perf_tbl_general['Sensitivity @ 5 Prc']))
                                             
-perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5[2:7]),\
-                                 np.mean(ndcg_lr5[2:7]),\
-                                     np.mean(ndcg_sgd5[2:7]),np.mean(ndcg_ada5[2:7]),\
-                                         np.mean(ndcg_mlp5[2:7]),\
-                                             np.mean(ndcg_fused5[2:7])] 
+perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5[2:8]),\
+                                 np.mean(ndcg_lr5[2:8]),\
+                                     np.mean(ndcg_sgd5[2:8]),np.mean(ndcg_ada5[2:8]),\
+                                         np.mean(ndcg_mlp5[2:8]),\
+                                             np.mean(ndcg_fused5[2:8])] 
 
-perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_svm10[2:7]),\
-                                 np.mean(sensitivity_OOS_lr10[2:7]),\
-                                     np.mean(sensitivity_OOS_sgd10[2:7]),\
-                                         np.mean(sensitivity_OOS_ada10[2:7]),\
-                                         np.mean(sensitivity_OOS_mlp10[2:7]),\
-                                             np.mean(sensitivity_OOS_fused10[2:7])]
+perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_svm10[2:8]),\
+                                 np.mean(sensitivity_OOS_lr10[2:8]),\
+                                     np.mean(sensitivity_OOS_sgd10[2:8]),\
+                                         np.mean(sensitivity_OOS_ada10[2:8]),\
+                                         np.mean(sensitivity_OOS_mlp10[2:8]),\
+                                             np.mean(sensitivity_OOS_fused10[2:8])]
 
 
-perf_tbl_general['Specificity @ 10 Prc']=[np.mean(specificity_OOS_svm10[2:7]),\
-                                 np.mean(specificity_OOS_lr10[2:7]),\
-                                     np.mean(specificity_OOS_sgd10[2:7]),\
-                                         np.mean(specificity_OOS_ada10[2:7]),\
-                                         np.mean(specificity_OOS_mlp10[2:7]),\
-                                             np.mean(specificity_OOS_fused10[2:7])]
+perf_tbl_general['Specificity @ 10 Prc']=[np.mean(specificity_OOS_svm10[2:8]),\
+                                 np.mean(specificity_OOS_lr10[2:8]),\
+                                     np.mean(specificity_OOS_sgd10[2:8]),\
+                                         np.mean(specificity_OOS_ada10[2:8]),\
+                                         np.mean(specificity_OOS_mlp10[2:8]),\
+                                             np.mean(specificity_OOS_fused10[2:8])]
     
-perf_tbl_general['Precision @ 10 Prc']=[np.mean(precision_svm10[2:7]),\
-                                 np.mean(precision_lr1[2:7]),\
-                                     np.mean(precision_sgd10[2:7]),\
-                                         np.mean(precision_ada10[2:7]),\
-                                         np.mean(precision_mlp10[2:7]),\
-                                             np.mean(precision_fused10[2:7])]
+perf_tbl_general['Precision @ 10 Prc']=[np.mean(precision_svm10[2:8]),\
+                                 np.mean(precision_lr1[2:8]),\
+                                     np.mean(precision_sgd10[2:8]),\
+                                         np.mean(precision_ada10[2:8]),\
+                                         np.mean(precision_mlp10[2:8]),\
+                                             np.mean(precision_fused10[2:8])]
 
 perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
                                       perf_tbl_general['Sensitivity @ 10 Prc'])/\
                                         ((perf_tbl_general['Precision @ 10 Prc']+\
                                           perf_tbl_general['Sensitivity @ 10 Prc']))
                                             
-perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10[2:7]),\
-                                 np.mean(ndcg_lr10[2:7]),\
-                                     np.mean(ndcg_sgd10[2:7]),np.mean(ndcg_ada10[2:7]),\
-                                         np.mean(ndcg_mlp10[2:7]),\
-                                             np.mean(ndcg_fused10[2:7])]   
+perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10[2:8]),\
+                                 np.mean(ndcg_lr10[2:8]),\
+                                     np.mean(ndcg_sgd10[2:8]),np.mean(ndcg_ada10[2:8]),\
+                                         np.mean(ndcg_mlp10[2:8]),\
+                                             np.mean(ndcg_fused10[2:8])]   
 
 
 if case_window=='expanding':
