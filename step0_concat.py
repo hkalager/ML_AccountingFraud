@@ -44,7 +44,7 @@ for s in range(1,5):
     new_df=pd.read_csv(fl_name)
     df=df.append(new_df)
 
-df.to_csv('FraudDB2020.csv_',index=False)
+df.to_csv('FraudDB2020.csv',index=False)
     
 
 
