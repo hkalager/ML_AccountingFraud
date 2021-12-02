@@ -302,6 +302,7 @@ precision_sgd10=np.zeros(len(range_oos))
 ndcg_sgd10=np.zeros(len(range_oos))
 ecm_sgd10=np.zeros(len(range_oos))
 
+
 roc_ada=np.zeros(len(range_oos))
 specificity_ada=np.zeros(len(range_oos))
 sensitivity_OOS_ada=np.zeros(len(range_oos))
@@ -1026,6 +1027,11 @@ perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1[2:8]),\
                                          np.mean(ndcg_mlp1[2:8]),\
                                              np.mean(ndcg_fused1[2:8])]   
 
+perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1[2:8]),\
+                                 np.mean(ecm_lr1[2:8]),\
+                                     np.mean(ecm_sgd1[2:8]),np.mean(ecm_ada1[2:8]),\
+                                         np.mean(ecm_mlp1[2:8]),np.mean(ecm_fused1[2:8])]
+
 perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_svm5[2:8]),\
                                  np.mean(sensitivity_OOS_lr5[2:8]),\
                                      np.mean(sensitivity_OOS_sgd5[2:8]),np.mean(sensitivity_OOS_ada5[2:8]),\
@@ -1055,6 +1061,11 @@ perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5[2:8]),\
                                      np.mean(ndcg_sgd5[2:8]),np.mean(ndcg_ada5[2:8]),\
                                          np.mean(ndcg_mlp5[2:8]),\
                                              np.mean(ndcg_fused5[2:8])] 
+
+perf_tbl_general['ECM @ 5 Prc']=[np.mean(ecm_svm5[2:8]),\
+                                 np.mean(ecm_lr5[2:8]),\
+                                     np.mean(ecm_sgd5[2:8]),np.mean(ecm_ada5[2:8]),\
+                                         np.mean(ecm_mlp5[2:8]),np.mean(ecm_fused5[2:8])]
 
 perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_svm10[2:8]),\
                                  np.mean(sensitivity_OOS_lr10[2:8]),\
@@ -1089,6 +1100,11 @@ perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10[2:8]),\
                                          np.mean(ndcg_mlp10[2:8]),\
                                              np.mean(ndcg_fused10[2:8])]   
 
+perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10[2:8]),\
+                                 np.mean(ecm_lr10[2:8]),\
+                                     np.mean(ecm_sgd10[2:8]),np.mean(ecm_ada10[2:8]),\
+                                         np.mean(ecm_mlp10[2:8]),np.mean(ecm_fused10[2:8])]
+    
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\

@@ -471,6 +471,8 @@ perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
                                             
 perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_svm1[2:8])
 
+perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_svm1[2:8])
+
 perf_tbl_general['Sensitivity @ 5 Prc']=np.mean(sensitivity_OOS_svm5[2:8])
 
 perf_tbl_general['Specificity @ 5 Prc']=np.mean(specificity_OOS_svm5[2:8])
@@ -483,6 +485,8 @@ perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
                                           perf_tbl_general['Sensitivity @ 5 Prc']))
                                             
 perf_tbl_general['NDCG @ 5 Prc']=np.mean(ndcg_svm5[2:8])
+
+perf_tbl_general['ECM @ 5 Prc']=np.mean(ecm_svm5[2:8])
 
 perf_tbl_general['Sensitivity @ 10 Prc']=np.mean(sensitivity_OOS_svm10[2:8])
 
@@ -497,6 +501,8 @@ perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*
                                           perf_tbl_general['Sensitivity @ 10 Prc']))
                                             
 perf_tbl_general['NDCG @ 10 Prc']=np.mean(ndcg_svm10[2:8])  
+
+perf_tbl_general['ECM @ 10 Prc']=np.mean(ecm_svm10[2:8])
 
 perf_tbl_general['Sensitivity']=np.mean(sensitivity_OOS_svm[2:8])
     
