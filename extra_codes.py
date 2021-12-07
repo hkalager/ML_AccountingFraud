@@ -60,6 +60,7 @@ from statsmodels.stats.outliers_influence import variance_inflation_factor
 
 
 def ndcg_k(label_true,est_prob,prc=1,pos_class=1):
+    #est_prob=np.round(est_prob,5)
     if label_true.shape[0]!=est_prob.shape[0]:
         raise ValueError('No data ... check the target series')
     # if fractional prc is provided multiple by 100
