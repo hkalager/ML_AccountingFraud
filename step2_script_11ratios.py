@@ -44,7 +44,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 21/10/2021
+Last review: 15/02/2022
 """
 import pandas as pd
 import numpy as np
@@ -113,7 +113,9 @@ if cross_val==True:
     
     print('Grid search hyperparameter optimisation started for SVM')
     t1=datetime.now()
-    param_grid_svm={'kernel':['linear','rbf','poly'],'class_weight':[{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+    param_grid_svm={'kernel':['linear','rbf','poly'],'class_weight':[\
+                                    {0:2e-3,1:1},{0:5e-3,1:1},
+                                    {0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
                                     {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
     base_mdl_svm=SVC(shrinking=False,\
                         probability=False,random_state=0,max_iter=-1,\
@@ -136,7 +138,7 @@ if cross_val==True:
     print('Grid search hyperparameter optimisation started for LR')
     t1=datetime.now()
     
-    param_grid_lr={'class_weight':[{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+    param_grid_lr={'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
                                     {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
     base_mdl_lr=LogisticRegression(random_state=None)
     
@@ -156,8 +158,9 @@ if cross_val==True:
     t1=datetime.now()
     
     param_grid_sgd={'penalty':['l1','l2'],'loss':['log','modified_huber'],\
-                    'class_weight':[{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
-                                    {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                    'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},\
+                                    {0:2e-2,1:1},{0:5e-2,1:1},{0:1e-1,1:1},\
+                                        {0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
     base_mdl_sgd=SGDClassifier(random_state=0,validation_fraction=.2,shuffle=False)
     
     clf_sgd = GridSearchCV(base_mdl_sgd, param_grid_sgd,scoring='roc_auc',\
@@ -176,17 +179,25 @@ if cross_val==True:
     print('Grid search hyperparameter optimisation started for AdaBoost')
     t1=datetime.now()
     
-    param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
-                    'learning_rate':[.1,5e-1,9e-1,1]}
+    best_perf_ada=0
+    class_weight_rng=[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},\
+                      {0:5e-2,1:1},{0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]
+    for class_ratio in class_weight_rng:
+        param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
+                        'learning_rate':[.1,5e-1,9e-1,1]}
+            
+        base_lr=LogisticRegression(random_state=0,class_weight=class_ratio)
+        base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
         
-    base_tree=LogisticRegression(random_state=0)
-    base_mdl_ada=AdaBoostClassifier(base_estimator=base_tree,random_state=0)
-    
-    clf_ada = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
-                       n_jobs=-1,cv=k_fold,refit=False)
-    clf_ada.fit(X_CV, Y_CV)
-    opt_params_ada=clf_ada.best_params_
-    score_ada=clf_ada.best_score_
+        clf_ada = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
+                           n_jobs=-1,cv=k_fold,refit=False)
+        clf_ada.fit(X_CV, Y_CV)
+        score_ada=clf_ada.best_score_
+        if score_ada>=best_perf_ada:
+            best_perf_ada=score_ada
+            opt_params_ada=clf_ada.best_params_
+            opt_class_weight_ada_lr=class_ratio
+        
     
     t2=datetime.now()
     dt=t2-t1
@@ -195,7 +206,8 @@ if cross_val==True:
     print('AdaBoost: The optimal number of estimators is '+\
           str(opt_params_ada['n_estimators'])+', and learning rate '+\
               str(opt_params_ada['learning_rate']))
-    
+    imbalance_fact=opt_class_weight_ada_lr[1]/opt_class_weight_ada_lr[0]
+    print('AdaBoost-LR: The optimal C+/C- is '+str(imbalance_fact))
     
     # optimise MLP classifier
     print('Grid search hyperparameter optimisation started for MLP')
@@ -228,10 +240,11 @@ else:
     C_opt_lr=opt_params_lr['class_weight'][0]
     score_lr=0.701876350738009
     
-    opt_params_sgd={'class_weight': {0: 0.01, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
-    score_sgd=0.7010985550937523
+    opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
+    score_sgd=0.7026775920776185
 
     opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
+    opt_class_weight_ada_lr={0:1e0,1:1}
     score_ada=0.700229450411913
     
     opt_params={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
@@ -301,7 +314,6 @@ specificity_OOS_sgd10=np.zeros(len(range_oos))
 precision_sgd10=np.zeros(len(range_oos))
 ndcg_sgd10=np.zeros(len(range_oos))
 ecm_sgd10=np.zeros(len(range_oos))
-
 
 roc_ada=np.zeros(len(range_oos))
 specificity_ada=np.zeros(len(range_oos))
@@ -617,10 +629,11 @@ for yr in range_oos:
     ecm_sgd10[m]=C_FN*P_f*FN_sgd10/n_P+C_FP*P_nf*FP_sgd10/n_N
     
     # Adaptive Boosting with logistic regression for weak learners
-    base_tree=LogisticRegression(random_state=0)
+    base_lr=LogisticRegression(random_state=0)
+    
     clf_ada=AdaBoostClassifier(n_estimators=opt_params_ada['n_estimators'],\
                                learning_rate=opt_params_ada['learning_rate'],\
-                                   base_estimator=base_tree,random_state=0)
+                                   base_estimator=base_lr,random_state=0)
     clf_ada=clf_ada.fit(X,Y)
     probs_oos_fraud_ada=clf_ada.predict_proba(X_OOS)[:,-1]
     
@@ -967,8 +980,6 @@ perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10),\
 #                                           perf_tbl_general['Sensitivity @ 10 Prc']))
 
 
-                                            
-                                            
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
@@ -1025,8 +1036,7 @@ perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1[2:8]),\
                                  np.mean(ndcg_svm1[2:8]),\
                                      np.mean(ndcg_sgd1[2:8]),np.mean(ndcg_ada1[2:8]),\
                                          np.mean(ndcg_mlp1[2:8]),\
-                                             np.mean(ndcg_fused1[2:8])]   
-
+                                             np.mean(ndcg_fused1[2:8])]
 perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1[2:8]),\
                                  np.mean(ecm_lr1[2:8]),\
                                      np.mean(ecm_sgd1[2:8]),np.mean(ecm_ada1[2:8]),\
@@ -1061,7 +1071,6 @@ perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5[2:8]),\
                                      np.mean(ndcg_sgd5[2:8]),np.mean(ndcg_ada5[2:8]),\
                                          np.mean(ndcg_mlp5[2:8]),\
                                              np.mean(ndcg_fused5[2:8])] 
-
 perf_tbl_general['ECM @ 5 Prc']=[np.mean(ecm_svm5[2:8]),\
                                  np.mean(ecm_lr5[2:8]),\
                                      np.mean(ecm_sgd5[2:8]),np.mean(ecm_ada5[2:8]),\
@@ -1099,12 +1108,10 @@ perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10[2:8]),\
                                      np.mean(ndcg_sgd10[2:8]),np.mean(ndcg_ada10[2:8]),\
                                          np.mean(ndcg_mlp10[2:8]),\
                                              np.mean(ndcg_fused10[2:8])]   
-
 perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10[2:8]),\
                                  np.mean(ecm_lr10[2:8]),\
                                      np.mean(ecm_sgd10[2:8]),np.mean(ecm_ada10[2:8]),\
                                          np.mean(ecm_mlp10[2:8]),np.mean(ecm_fused10[2:8])]
-    
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
