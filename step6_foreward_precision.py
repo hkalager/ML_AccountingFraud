@@ -57,14 +57,14 @@ Steps:
 
 Warnings: 
     – This code requires a pickle file from running the SVM FK script. 
-    – Running this code can take up to 4 hours if the Financial Kernel pickle 
+    – Running this code can take up to 210 mins if the Financial Kernel pickle 
     file is already loaded.
     These figures are estimates based on a MacBook Pro 2017.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 07/12/2021
+Last review: 15/02/2022
 """
 import pandas as pd
 import numpy as np
@@ -78,7 +78,7 @@ import rusboost
 from datetime import datetime
 import pickle
 import os
-
+from statsmodels.stats.weightstats import ttest_ind
 
 # start the clock!
 t0=datetime.now()
@@ -119,8 +119,8 @@ opt_params_lr={'class_weight': {0: 0.05, 1: 1}}
 C_opt_lr=opt_params_lr['class_weight'][0]
 score_lr=0.701876350738009
 
-opt_params_sgd={'class_weight': {0: 0.01, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
-score_sgd=0.7010985550937523
+opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
+score_sgd=0.7026775920776185
 
 opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
 score_ada=0.700229450411913
@@ -494,7 +494,7 @@ print('average top percentile sensitivity for the period '+str(start_OOS_year)+'
 
 # create performance table now
 forward_tbl=pd.DataFrame()
-forward_tbl['models']=['SVM-FK-23','RUSBoost','SVM','LR','SGD','ADA','MLP','FUSED']
+forward_tbl['models']=['SVM-FK-23','RUSBoost-28','SVM','LR','SGD','ADA','MLP','FUSED']
 
 
 forward_tbl['Mean Forward Precision']=[np.mean(precision_svm_fk1),\
@@ -502,12 +502,27 @@ forward_tbl['Mean Forward Precision']=[np.mean(precision_svm_fk1),\
                                  np.mean(precision_lr1),\
                                      np.mean(precision_sgd1),np.mean(precision_ada1),\
                                          np.mean(precision_mlp1),np.mean(precision_fused1)]
+
+pval_svm_fk=ttest_ind(precision_svm1,precision_svm_fk1,alternative='smaller')[1]
+pval_rus=ttest_ind(precision_svm1,precision_rus1,alternative='smaller')[1]
+pval_svm=ttest_ind(precision_svm1,precision_svm1,alternative='smaller')[1]
+pval_lr=ttest_ind(precision_svm1,precision_lr1,alternative='smaller')[1]
+pval_sgd=ttest_ind(precision_svm1,precision_sgd1,alternative='smaller')[1]
+pval_ada=ttest_ind(precision_svm1,precision_ada1,alternative='smaller')[1]
+pval_mlp=ttest_ind(precision_svm1,precision_mlp1,alternative='smaller')[1]
+pval_fused=ttest_ind(precision_svm1,precision_fused1,alternative='smaller')[1]
+
+forward_tbl['ttest pval']=[pval_svm_fk,pval_rus,pval_svm,pval_lr,pval_sgd,\
+                                 pval_ada,pval_mlp,pval_fused]
+
 forward_tbl['Std Forward Precision']=[np.std(precision_svm_fk1),\
                                       np.std(precision_rus1),np.std(precision_svm1),\
                                  np.std(precision_lr1),\
                                      np.std(precision_sgd1),np.std(precision_ada1),\
                                          np.std(precision_mlp1),np.std(precision_fused1)]
 
+    
+    
 # Measure the average number of years where a correct prediction is made 
 
 
