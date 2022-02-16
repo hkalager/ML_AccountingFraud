@@ -32,14 +32,14 @@ Steps:
     2. Estimating the performance for each OOS period.
 
 Warnings: 
-    – Running this code can take up to 300 mins. The cross-validation takes up
-    to 240 mins (you can skip this step) main analysis up to 60 mins. 
+    – Running this code can take up to 510 mins. The cross-validation takes up
+    to 450 mins (you can skip this step) main analysis up to 60 mins. 
     These figures are estimates based on a MacBook Pro 2017.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 21/10/2021
+Last review: 16/02/2022
 """
 import pandas as pd
 import numpy as np
@@ -65,6 +65,7 @@ adjust_serial=True
 cross_val=False
 case_window='expanding'
 fraud_df=pd.read_csv('FraudDB2020.csv')
+
 
 fyears_available=np.unique(fraud_df.fyear)
 count_over=count_fraud=np.zeros(fyears_available.shape)
@@ -107,14 +108,22 @@ if cross_val==True:
     param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
                     'learning_rate':[.1,5e-1,9e-1,1]}
         
-    base_lr=LogisticRegression(random_state=0)
-    base_mdl_ada_lr=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
-    
-    clf_ada_lr = GridSearchCV(base_mdl_ada_lr, param_grid_ada,scoring='roc_auc',\
-                       n_jobs=-1,cv=k_fold,refit=False)
-    clf_ada_lr.fit(X_CV, Y_CV)
-    opt_params_ada_lr=clf_ada_lr.best_params_
-    score_ada_lr=clf_ada_lr.best_score_
+    best_perf_ada=0
+    class_weight_rng=[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},\
+                      {0:5e-2,1:1},{0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]
+    for class_ratio in class_weight_rng:
+        base_lr=LogisticRegression(random_state=0,class_weight=class_ratio)
+        base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
+        
+        clf_ada_lr = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
+                           n_jobs=-1,cv=k_fold,refit=False)
+        clf_ada_lr.fit(X_CV, Y_CV)
+        score_ada_lr=clf_ada_lr.best_score_
+        if score_ada_lr>=best_perf_ada:
+            best_perf_ada=score_ada_lr
+            opt_params_ada_lr=clf_ada_lr.best_params_
+            opt_class_weight_ada_lr=class_ratio
+        
     
     t2=datetime.now()
     dt=t2-t1
@@ -123,21 +132,25 @@ if cross_val==True:
     print('AdaBoost-LR: The optimal number of estimators is '+\
           str(opt_params_ada_lr['n_estimators'])+', and learning rate '+\
               str(opt_params_ada_lr['learning_rate']))
+    imbalance_fact=opt_class_weight_ada_lr[1]/opt_class_weight_ada_lr[0]
+    print('AdaBoost-LR: The optimal C+/C- is '+str(imbalance_fact))
     
     # optimise AdaBoost with tree learners (Ada-Tree): this is the basic model    
     t1=datetime.now()
-    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-        
-    param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
-                    'learning_rate':[.1,5e-1,9e-1,1]}
-        
-    base_mdl_ada=AdaBoostClassifier(base_estimator=base_tree,random_state=0)
     
-    clf_ada_tree = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
+    best_perf_ada_tree=0
+    for class_ratio in class_weight_rng:
+        base_tree=DecisionTreeClassifier(min_samples_leaf=5,class_weight=class_ratio)
+        base_mdl_ada=AdaBoostClassifier(base_estimator=base_tree,random_state=0)
+        clf_ada_tree = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
                        n_jobs=-1,cv=k_fold,refit=False)
-    clf_ada_tree.fit(X_CV, Y_CV)
-    opt_params_ada_tree=clf_ada_tree.best_params_
-    score_ada_tree=clf_ada_tree.best_score_
+        clf_ada_tree.fit(X_CV, Y_CV)
+        score_ada_tree=clf_ada_tree.best_score_
+        if score_ada_tree>best_perf_ada_tree:
+            best_perf_ada_tree=score_ada_tree
+            opt_params_ada_tree=clf_ada_tree.best_params_
+            opt_class_weight_ada_tree=class_ratio
+        
     
     t2=datetime.now()
     dt=t2-t1
@@ -147,14 +160,18 @@ if cross_val==True:
           str(opt_params_ada_tree['n_estimators'])+', and learning rate '+\
               str(opt_params_ada_tree['learning_rate']))
     
+    imbalance_fact_tree=opt_class_weight_ada_tree[1]/opt_class_weight_ada_tree[0]
+    print('AdaBoost-Tree: The optimal C+/C- is '+str(imbalance_fact_tree))
     print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
 else:
     
     opt_params_ada_lr={'learning_rate': 0.9, 'n_estimators': 20}
+    opt_class_weight_ada_lr={0:1e0,1:1}
     score_ada_lr=0.700229450411913
     
     opt_params_ada_tree={'learning_rate': 0.1, 'n_estimators': 500}
-    score_ada_tree=0.6399497041440964
+    opt_class_weight_ada_tree={0: 0.02, 1: 1}
+    score_ada_tree=0.6584007795597742
 
 
 range_oos=range(start_OOS_year,end_OOS_year+1,OOS_period)
@@ -252,7 +269,7 @@ for yr in range_oos:
     n_N=np.sum(Y_OOS==0)
     
     # Adaptive Boosting with logistic regression for weak learners
-    base_lr=LogisticRegression(random_state=0)
+    base_lr=LogisticRegression(random_state=0,class_weight=opt_class_weight_ada_lr)
     clf_ada_lr=AdaBoostClassifier(n_estimators=opt_params_ada_lr['n_estimators'],\
                                learning_rate=opt_params_ada_lr['learning_rate'],\
                                    base_estimator=base_lr,random_state=0)
@@ -321,7 +338,7 @@ for yr in range_oos:
     
     
     # Adaptive Boosting with decision trees as weak learners
-    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5,class_weight=opt_class_weight_ada_tree)
     clf_ada_tree=AdaBoostClassifier(n_estimators=opt_params_ada_tree['n_estimators'],\
                                learning_rate=opt_params_ada_tree['learning_rate'],\
                                    base_estimator=base_tree,random_state=0)
