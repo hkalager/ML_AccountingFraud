@@ -51,7 +51,7 @@ Warnings:
     – To make sure the computations are stored, you can set variable "record_matrix" to True.
     – If "record_matrix==True" the code stores a pickle file of ~ 900MB on your disk.
     – You can choose to turn cross-validation on/off by setting "cross_val" to True/False
-    – If "cross_val==True" a five-fold cross-validation is performed. 
+    – If "cross_val==True" a 10-fold cross-validation is performed. 
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.

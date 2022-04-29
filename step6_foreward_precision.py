@@ -35,14 +35,14 @@ Inputs:
 
 Predictive models:
     – Support Vector Machine with Financial Kernel as in Cecchini et al 2010;
-        this model uses 23 raw variables
-    – RUSBoost as Bao et al 2020; this model uses 28 raw variables
+        this model uses 23 raw variables (SVM-FK)
+    – RUSBoost as Bao et al 2020; this model uses 28 raw variables (RUSBOOST)
     – Support Vector Machine with a linear kernel; this model uses 11 financial 
-        ratios
-    – Logistic Regression; this model uses 11 financial ratios
-    – SGD Tree Boosting; this model uses 11 financial ratios
-    – Adaptive Boosting with Logistic Regression; this model uses 11 financial ratios
-    – MUlti-layered Perceptron; this model uses 11 financial ratios
+        ratios (SVM)
+    – Logistic Regression; this model uses 11 financial ratios (KR)
+    – SGD Tree Boosting; this model uses 11 financial ratios (SGD)
+    – LogitBoost; this model uses 11 financial ratios (ADA)
+    – MUlti-layered Perceptron; this model uses 11 financial ratios (MLP)
     – FUSED (weighted average of estimated probs of other methods); this model 
         uses 11 financial ratios
 

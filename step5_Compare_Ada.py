@@ -20,8 +20,8 @@ Expected columns are:
 45	dfcf, 46	issuance, 47	bm, 48	depindex, 49	ebitat, 50	reat
 
 Predictive models:
-    – Adaptive Boosting with Decision Tree
-    – Adaptive Boosting with Logistic Regression
+    – Adaptive Boosting with Decision Tree (AdaBoost-Tree)
+    – Adaptive Boosting with Logistic Regression (LogitBoost)
 
 Outputs: 
 Main results are stored in the table variable "perf_tbl_general" written into
@@ -39,7 +39,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 16/02/2022
+Last review: 29/04/2022
 """
 import pandas as pd
 import numpy as np
@@ -76,8 +76,7 @@ reduced_tblset=[reduced_tbl_1,reduced_tbl_2]
 reduced_tbl=pd.concat(reduced_tblset,axis=1)
 reduced_tbl=reduced_tbl[reduced_tbl.fyear>=1991]
 reduced_tbl=reduced_tbl[reduced_tbl.fyear<=2010]
-num_comp=len(np.unique(reduced_tbl.gvkey))
-print(str(num_comp)+' companies in the dataset between 1991 and 2011')
+
 # Setting the cross-validation setting
 
 tbl_year_IS_CV=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<2001,\
@@ -177,7 +176,6 @@ else:
 range_oos=range(start_OOS_year,end_OOS_year+1,OOS_period)
 
 
-
 roc_ada_tree=np.zeros(len(range_oos))
 specificity_ada_tree=np.zeros(len(range_oos))
 sensitivity_OOS_ada_tree=np.zeros(len(range_oos))
@@ -187,18 +185,6 @@ specificity_OOS_ada_tree1=np.zeros(len(range_oos))
 precision_ada_tree1=np.zeros(len(range_oos))
 ndcg_ada_tree1=np.zeros(len(range_oos))
 ecm_ada_tree1=np.zeros(len(range_oos))
-
-sensitivity_OOS_ada_tree5=np.zeros(len(range_oos))
-specificity_OOS_ada_tree5=np.zeros(len(range_oos))
-precision_ada_tree5=np.zeros(len(range_oos))
-ndcg_ada_tree5=np.zeros(len(range_oos))
-ecm_ada_tree5=np.zeros(len(range_oos))
-
-sensitivity_OOS_ada_tree10=np.zeros(len(range_oos))
-specificity_OOS_ada_tree10=np.zeros(len(range_oos))
-precision_ada_tree10=np.zeros(len(range_oos))
-ndcg_ada_tree10=np.zeros(len(range_oos))
-ecm_ada_tree10=np.zeros(len(range_oos))
 
 
 roc_ada_lr=np.zeros(len(range_oos))
@@ -211,17 +197,6 @@ precision_ada_lr1=np.zeros(len(range_oos))
 ndcg_ada_lr1=np.zeros(len(range_oos))
 ecm_ada_lr1=np.zeros(len(range_oos))
 
-sensitivity_OOS_ada_lr5=np.zeros(len(range_oos))
-specificity_OOS_ada_lr5=np.zeros(len(range_oos))
-precision_ada_lr5=np.zeros(len(range_oos))
-ndcg_ada_lr5=np.zeros(len(range_oos))
-ecm_ada_lr5=np.zeros(len(range_oos))
-
-sensitivity_OOS_ada_lr10=np.zeros(len(range_oos))
-specificity_OOS_ada_lr10=np.zeros(len(range_oos))
-precision_ada_lr10=np.zeros(len(range_oos))
-ndcg_ada_lr10=np.zeros(len(range_oos))
-ecm_ada_lr10=np.zeros(len(range_oos))
 
 
 m=0
@@ -268,7 +243,7 @@ for yr in range_oos:
     n_P=np.sum(Y_OOS==1)
     n_N=np.sum(Y_OOS==0)
     
-    # Adaptive Boosting with logistic regression for weak learners
+    # Adaptive Boosting with logistic regression for weak learners (LogitBoost)
     base_lr=LogisticRegression(random_state=0,class_weight=opt_class_weight_ada_lr)
     clf_ada_lr=AdaBoostClassifier(n_estimators=opt_params_ada_lr['n_estimators'],\
                                learning_rate=opt_params_ada_lr['learning_rate'],\
@@ -303,41 +278,10 @@ for yr in range_oos:
         
     ecm_ada_lr1[m]=C_FN*P_f*FN_ada_lr1/n_P+C_FP*P_nf*FP_ada_lr1/n_N
         
-    cutoff_OOS_ada_lr5=np.percentile(probs_oos_fraud_ada_lr,95)
-    sensitivity_OOS_ada_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr<cutoff_OOS_ada_lr5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr5)
-    ndcg_ada_lr5[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada_lr,95)
-    
-    FN_ada_lr5=np.sum(np.logical_and(probs_oos_fraud_ada_lr<cutoff_OOS_ada_lr5, \
-                                                  Y_OOS==1))
-    FP_ada_lr5=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr5, \
-                                                  Y_OOS==0))
-        
-    ecm_ada_lr5[m]=C_FN*P_f*FN_ada_lr5/n_P+C_FP*P_nf*FP_ada_lr5/n_N
-    
-    cutoff_OOS_ada_lr10=np.percentile(probs_oos_fraud_ada_lr,90)
-    sensitivity_OOS_ada_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr<cutoff_OOS_ada_lr10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr10)
-    ndcg_ada_lr10[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada_lr,90)
-    
-    FN_ada_lr10=np.sum(np.logical_and(probs_oos_fraud_ada_lr<cutoff_OOS_ada_lr10, \
-                                                  Y_OOS==1))
-    FP_ada_lr10=np.sum(np.logical_and(probs_oos_fraud_ada_lr>=cutoff_OOS_ada_lr10, \
-                                                  Y_OOS==0))
-        
-    ecm_ada_lr10[m]=C_FN*P_f*FN_ada_lr10/n_P+C_FP*P_nf*FP_ada_lr10/n_N
     
     
     
-    # Adaptive Boosting with decision trees as weak learners
+    # Adaptive Boosting with decision trees as weak learners (AdaBoost)
     base_tree=DecisionTreeClassifier(min_samples_leaf=5,class_weight=opt_class_weight_ada_tree)
     clf_ada_tree=AdaBoostClassifier(n_estimators=opt_params_ada_tree['n_estimators'],\
                                learning_rate=opt_params_ada_tree['learning_rate'],\
@@ -372,37 +316,6 @@ for yr in range_oos:
         
     ecm_ada_tree1[m]=C_FN*P_f*FN_ada_tree1/n_P+C_FP*P_nf*FP_ada_tree1/n_N
         
-    cutoff_OOS_ada_tree5=np.percentile(probs_oos_fraud_ada_tree,95)
-    sensitivity_OOS_ada_tree5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada_tree5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree<cutoff_OOS_ada_tree5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada_tree5[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree5)
-    ndcg_ada_tree5[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada_tree,95)
-    
-    FN_ada_tree5=np.sum(np.logical_and(probs_oos_fraud_ada_tree<cutoff_OOS_ada_tree5, \
-                                                  Y_OOS==1))
-    FP_ada_tree5=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree5, \
-                                                  Y_OOS==0))
-        
-    ecm_ada_tree5[m]=C_FN*P_f*FN_ada_tree5/n_P+C_FP*P_nf*FP_ada_tree5/n_N
-    
-    cutoff_OOS_ada_tree10=np.percentile(probs_oos_fraud_ada_tree,90)
-    sensitivity_OOS_ada_tree10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada_tree10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree<cutoff_OOS_ada_tree10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada_tree10[m]=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree10)
-    ndcg_ada_tree10[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada_tree,90)
-    
-    FN_ada_tree10=np.sum(np.logical_and(probs_oos_fraud_ada_tree<cutoff_OOS_ada_tree10, \
-                                                  Y_OOS==1))
-    FP_ada_tree10=np.sum(np.logical_and(probs_oos_fraud_ada_tree>=cutoff_OOS_ada_tree10, \
-                                                  Y_OOS==0))
-        
-    ecm_ada_tree10[m]=C_FN*P_f*FN_ada_tree10/n_P+C_FP*P_nf*FP_ada_tree10/n_N
     
     
     t2=datetime.now() 
@@ -412,13 +325,13 @@ for yr in range_oos:
 
 print('average top percentile sensitivity for the period '+str(start_OOS_year)+' to '+\
       str(end_OOS_year)+' is '+ str(round(np.mean(sensitivity_OOS_ada_lr1)*100,2))+\
-                          '% for ADA-LR vs '+ str(round(np.mean(sensitivity_OOS_ada_tree1)*100,2))+\
-                              '% for ADA-Tree')
+                          '% for LogitBoost vs '+ str(round(np.mean(sensitivity_OOS_ada_tree1)*100,2))+\
+                              '% for AdaBoost')
 
 
 # create performance table now
 perf_tbl_general=pd.DataFrame()
-perf_tbl_general['models']=['ADA-Tree','Ada-LR']
+perf_tbl_general['models']=['AdaBoost','LogitBoost']
 perf_tbl_general['Roc']=[np.mean(roc_ada_tree),np.mean(roc_ada_lr)]
 
                                             
@@ -441,43 +354,6 @@ perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_ada_tree1),\
 perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_ada_tree1),\
                                  np.mean(ecm_ada_lr1)]
     
-perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_ada_tree5),\
-                                 np.mean(sensitivity_OOS_ada_lr5)]
-
-perf_tbl_general['Specificity @ 5 Prc']=[np.mean(specificity_OOS_ada_tree5),\
-                                 np.mean(specificity_OOS_ada_lr5)]
-
-perf_tbl_general['Precision @ 5 Prc']=[np.mean(precision_ada_tree5),\
-                                 np.mean(precision_ada_lr5)]
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_ada_tree5),\
-                                 np.mean(ndcg_ada_lr5)]
-
-perf_tbl_general['ECM @ 5 Prc']=[np.mean(ecm_ada_tree5),\
-                                 np.mean(ecm_ada_lr5)]
-    
-perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_ada_tree10),\
-                                 np.mean(sensitivity_OOS_ada_lr10)]
-
-perf_tbl_general['Specificity @ 10 Prc']=[np.mean(specificity_OOS_ada_tree10),\
-                                 np.mean(specificity_OOS_ada_lr10)]
-
-perf_tbl_general['Precision @ 10 Prc']=[np.mean(precision_ada_tree10),\
-                                 np.mean(precision_ada_lr10)]
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_ada_tree10),\
-                                 np.mean(ndcg_ada_lr10)]
-
-perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_ada_tree10),\
-                                 np.mean(ecm_ada_lr10)]
                                           
 lbl_perf_tbl='Compare_Ada'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
     '_'+case_window+',OOS='+str(OOS_period)+','+\

@@ -41,12 +41,12 @@ Steps:
 
 Warnings: 
     – Running this code can take up to 1 mins. 
-    These figures are estimates based on a MacBook Pro 2017.
+    These figures are estimates based on a MacBook Pro 2021.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 23/07/2021
+Last review: 29/04/2022
 """
 from extra_codes import calc_vif
 import pandas as pd
@@ -74,10 +74,11 @@ ax.set_ylabel('# fraud')
 ax.set_title('Count of fraud')
 ax.legend()
 
-fraud_df=fraud_df[np.logical_and(fraud_df.fyear<=2010,fraud_df.fyear>=1991)]
+fraud_df=fraud_df[fraud_df.fyear>=1991]
+last_year=np.max(fraud_df.fyear)
 fraud_df=fraud_df.reset_index(drop=True)
 num_comp=len(np.unique(fraud_df.gvkey))
-print(str(num_comp)+' companies in the dataset between 1991 and 2011')
+print(str(num_comp)+' unique in the dataset between 1991 and '+str(last_year))
 
 
 reduced_tbl_ratio=fraud_df.iloc[:,-14:-3]
@@ -161,8 +162,8 @@ ser_tbl.to_csv('SerialStats.csv',index=False)
 print('Serial fraud results generated successfully ... ')
 
 fig, ax = plt.subplots()
-ax.plot(range_oos,serial_fraud_count,'s:r',label='total fraud')
-ax.plot(range_oos,fraud_count,'s:b',label='serial fraud')
+ax.plot(range_oos,serial_fraud_count,'s:r',label='# serial fraud')
+ax.plot(range_oos,fraud_count,'s:b',label='# total fraud')
 ax.set_xlabel('Calendar Year')
 ax.set_ylabel('# firms')
 ax.set_title('companies with previous history of misstatement')

@@ -21,16 +21,16 @@ Expected columns are:
 45	dfcf, 46	issuance, 47	bm, 48	depindex, 49	ebitat, 50	reat
 
 Predictive models:
-    – Support Vector Machines
-    – Logistic Regression
-    – SGD Tree Boosting
-    – Adaptive Boosting with Logistic Regression
-    – MUlti-layered Perceptron
+    – Support Vector Machine (SVM)
+    – Logistic Regression (LR)
+    – SGD Tree Boosting (SGD)
+    – Adaptive Boosting with Logistic Regression/LogitBoost (ADA)
+    – MUlti-layered Perceptron (MLP)
     – FUSED (weighted average of estimated probs of other methods)
 
 Outputs: 
 Main results are stored in the table variable "perf_tbl_general" written into
-2 csv files: time period 2001-2010 and 2003-2008
+2 csv files: time period 2001-2010 and 2003-2008. 
 
 Steps:
     1. Cross-validate to find optimal hyperparameters.
@@ -39,12 +39,12 @@ Steps:
 Warnings: 
     – Running this code can take up to 85 mins. The cross-validation takes up
     to 60 mins (you can skip this step) main analysis up to 25 mins. 
-    These figures are estimates based on a MacBook Pro 2017.
+    These figures are estimates based on a MacBook Pro 2021.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 15/02/2022
+Last review: 29/04/2022
 """
 import pandas as pd
 import numpy as np
@@ -83,8 +83,7 @@ reduced_tblset=[reduced_tbl_1,reduced_tbl_2]
 reduced_tbl=pd.concat(reduced_tblset,axis=1)
 reduced_tbl=reduced_tbl[reduced_tbl.fyear>=1991]
 reduced_tbl=reduced_tbl[reduced_tbl.fyear<=2010]
-num_comp=len(np.unique(reduced_tbl.gvkey))
-print(str(num_comp)+' companies in the dataset between 1991 and 2011')
+
 # Setting the cross-validation setting
 
 tbl_year_IS_CV=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<2001,\
@@ -201,13 +200,13 @@ if cross_val==True:
     
     t2=datetime.now()
     dt=t2-t1
-    print('AdaBoost CV finished after '+str(dt.total_seconds())+' sec')
+    print('ADA CV finished after '+str(dt.total_seconds())+' sec')
     
-    print('AdaBoost: The optimal number of estimators is '+\
+    print('ADA: The optimal number of estimators is '+\
           str(opt_params_ada['n_estimators'])+', and learning rate '+\
               str(opt_params_ada['learning_rate']))
     imbalance_fact=opt_class_weight_ada_lr[1]/opt_class_weight_ada_lr[0]
-    print('AdaBoost-LR: The optimal C+/C- is '+str(imbalance_fact))
+    print('ADA: The optimal C+/C- is '+str(imbalance_fact))
     
     # optimise MLP classifier
     print('Grid search hyperparameter optimisation started for MLP')
@@ -262,17 +261,6 @@ specificity_OOS_svm1=np.zeros(len(range_oos))
 precision_svm1=np.zeros(len(range_oos))
 ndcg_svm1=np.zeros(len(range_oos))
 ecm_svm1=np.zeros(len(range_oos))
-sensitivity_OOS_svm5=np.zeros(len(range_oos))
-specificity_OOS_svm5=np.zeros(len(range_oos))
-precision_svm5=np.zeros(len(range_oos))
-ndcg_svm5=np.zeros(len(range_oos))
-ecm_svm5=np.zeros(len(range_oos))
-sensitivity_OOS_svm10=np.zeros(len(range_oos))
-specificity_OOS_svm10=np.zeros(len(range_oos))
-precision_svm10=np.zeros(len(range_oos))
-ndcg_svm10=np.zeros(len(range_oos))
-ecm_svm10=np.zeros(len(range_oos))
-
 
 roc_lr=np.zeros(len(range_oos))
 specificity_lr=np.zeros(len(range_oos))
@@ -283,17 +271,6 @@ specificity_OOS_lr1=np.zeros(len(range_oos))
 precision_lr1=np.zeros(len(range_oos))
 ndcg_lr1=np.zeros(len(range_oos))
 ecm_lr1=np.zeros(len(range_oos))
-sensitivity_OOS_lr5=np.zeros(len(range_oos))
-specificity_OOS_lr5=np.zeros(len(range_oos))
-precision_lr5=np.zeros(len(range_oos))
-ndcg_lr5=np.zeros(len(range_oos))
-ecm_lr5=np.zeros(len(range_oos))
-sensitivity_OOS_lr10=np.zeros(len(range_oos))
-specificity_OOS_lr10=np.zeros(len(range_oos))
-precision_lr10=np.zeros(len(range_oos))
-ndcg_lr10=np.zeros(len(range_oos))
-ecm_lr10=np.zeros(len(range_oos))
-
 
 roc_sgd=np.zeros(len(range_oos))
 specificity_sgd=np.zeros(len(range_oos))
@@ -304,16 +281,6 @@ specificity_OOS_sgd1=np.zeros(len(range_oos))
 precision_sgd1=np.zeros(len(range_oos))
 ndcg_sgd1=np.zeros(len(range_oos))
 ecm_sgd1=np.zeros(len(range_oos))
-sensitivity_OOS_sgd5=np.zeros(len(range_oos))
-specificity_OOS_sgd5=np.zeros(len(range_oos))
-precision_sgd5=np.zeros(len(range_oos))
-ndcg_sgd5=np.zeros(len(range_oos))
-ecm_sgd5=np.zeros(len(range_oos))
-sensitivity_OOS_sgd10=np.zeros(len(range_oos))
-specificity_OOS_sgd10=np.zeros(len(range_oos))
-precision_sgd10=np.zeros(len(range_oos))
-ndcg_sgd10=np.zeros(len(range_oos))
-ecm_sgd10=np.zeros(len(range_oos))
 
 roc_ada=np.zeros(len(range_oos))
 specificity_ada=np.zeros(len(range_oos))
@@ -324,16 +291,6 @@ specificity_OOS_ada1=np.zeros(len(range_oos))
 precision_ada1=np.zeros(len(range_oos))
 ndcg_ada1=np.zeros(len(range_oos))
 ecm_ada1=np.zeros(len(range_oos))
-sensitivity_OOS_ada5=np.zeros(len(range_oos))
-specificity_OOS_ada5=np.zeros(len(range_oos))
-precision_ada5=np.zeros(len(range_oos))
-ndcg_ada5=np.zeros(len(range_oos))
-ecm_ada5=np.zeros(len(range_oos))
-sensitivity_OOS_ada10=np.zeros(len(range_oos))
-specificity_OOS_ada10=np.zeros(len(range_oos))
-precision_ada10=np.zeros(len(range_oos))
-ndcg_ada10=np.zeros(len(range_oos))
-ecm_ada10=np.zeros(len(range_oos))
 
 
 roc_mlp=np.zeros(len(range_oos))
@@ -345,16 +302,6 @@ specificity_OOS_mlp1=np.zeros(len(range_oos))
 precision_mlp1=np.zeros(len(range_oos))
 ndcg_mlp1=np.zeros(len(range_oos))
 ecm_mlp1=np.zeros(len(range_oos))
-sensitivity_OOS_mlp5=np.zeros(len(range_oos))
-specificity_OOS_mlp5=np.zeros(len(range_oos))
-precision_mlp5=np.zeros(len(range_oos))
-ndcg_mlp5=np.zeros(len(range_oos))
-ecm_mlp5=np.zeros(len(range_oos))
-sensitivity_OOS_mlp10=np.zeros(len(range_oos))
-specificity_OOS_mlp10=np.zeros(len(range_oos))
-precision_mlp10=np.zeros(len(range_oos))
-ndcg_mlp10=np.zeros(len(range_oos))
-ecm_mlp10=np.zeros(len(range_oos))
 
 
 roc_fused=np.zeros(len(range_oos))
@@ -366,16 +313,7 @@ specificity_OOS_fused1=np.zeros(len(range_oos))
 precision_fused1=np.zeros(len(range_oos))
 ndcg_fused1=np.zeros(len(range_oos))
 ecm_fused1=np.zeros(len(range_oos))
-sensitivity_OOS_fused5=np.zeros(len(range_oos))
-specificity_OOS_fused5=np.zeros(len(range_oos))
-precision_fused5=np.zeros(len(range_oos))
-ecm_fused5=np.zeros(len(range_oos))
-ndcg_fused5=np.zeros(len(range_oos))
-sensitivity_OOS_fused10=np.zeros(len(range_oos))
-specificity_OOS_fused10=np.zeros(len(range_oos))
-precision_fused10=np.zeros(len(range_oos))
-ndcg_fused10=np.zeros(len(range_oos))
-ecm_fused10=np.zeros(len(range_oos))
+
 
 m=0
 for yr in range_oos:
@@ -461,38 +399,6 @@ for yr in range_oos:
         
     ecm_svm1[m]=C_FN*P_f*FN_svm1/n_P+C_FP*P_nf*FP_svm1/n_N
         
-    cutoff_OOS_svm5=np.percentile(probs_oos_fraud_svm,95)
-    sensitivity_OOS_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                  Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_svm>=cutoff_OOS_svm5)
-    ndcg_svm5[m]=ndcg_k(Y_OOS,probs_oos_fraud_svm,95)
-    
-    FN_svm5=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm5, \
-                                                  Y_OOS==1))
-    FP_svm5=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                  Y_OOS==0))
-        
-    ecm_svm5[m]=C_FN*P_f*FN_svm5/n_P+C_FP*P_nf*FP_svm5/n_N
-    
-    
-    cutoff_OOS_svm10=np.percentile(probs_oos_fraud_svm,90)
-    sensitivity_OOS_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                  Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_svm>=cutoff_OOS_svm10)
-    ndcg_svm10[m]=ndcg_k(Y_OOS,probs_oos_fraud_svm,90)
-    
-    FN_svm10=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm10, \
-                                                  Y_OOS==1))
-    FP_svm10=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                  Y_OOS==0))
-        
-    ecm_svm10[m]=C_FN*P_f*FN_svm10/n_P+C_FP*P_nf*FP_svm10/n_N
     
     # Logistic Regression – Dechow et al (2011)
     
@@ -529,35 +435,6 @@ for yr in range_oos:
         
     ecm_lr1[m]=C_FN*P_f*FN_lr1/n_P+C_FP*P_nf*FP_lr1/n_N
         
-    cutoff_OOS_lr5=np.percentile(probs_oos_fraud_lr,95)
-    sensitivity_OOS_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr5, Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_lr<cutoff_OOS_lr5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_lr5[m]=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_lr>=cutoff_OOS_lr5)
-    ndcg_lr5[m]=ndcg_k(Y_OOS,probs_oos_fraud_lr,95)
-    
-    FN_lr5=np.sum(np.logical_and(probs_oos_fraud_lr<cutoff_OOS_lr5, \
-                                                  Y_OOS==1))
-    FP_lr5=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr5, \
-                                                  Y_OOS==0))
-        
-    ecm_lr5[m]=C_FN*P_f*FN_lr5/n_P+C_FP*P_nf*FP_lr5/n_N
-    
-    cutoff_OOS_lr10=np.percentile(probs_oos_fraud_lr,90)
-    sensitivity_OOS_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr10, Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_lr<cutoff_OOS_lr10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_lr10[m]=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_lr>=cutoff_OOS_lr10)
-    ndcg_lr10[m]=ndcg_k(Y_OOS,probs_oos_fraud_lr,90)
-    
-    FN_lr10=np.sum(np.logical_and(probs_oos_fraud_lr<cutoff_OOS_lr10, \
-                                                  Y_OOS==1))
-    FP_lr10=np.sum(np.logical_and(probs_oos_fraud_lr>=cutoff_OOS_lr10, \
-                                                  Y_OOS==0))
-        
-    ecm_lr10[m]=C_FN*P_f*FN_lr10/n_P+C_FP*P_nf*FP_lr10/n_N
     
     # Stochastic Gradient Decent 
 
@@ -596,39 +473,9 @@ for yr in range_oos:
     ecm_sgd1[m]=C_FN*P_f*FN_sgd1/n_P+C_FP*P_nf*FP_sgd1/n_N
     
     
-    cutoff_OOS_sgd5=np.percentile(probs_oos_fraud_sgd,95)
-    sensitivity_OOS_sgd5[m]=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_sgd5[m]=np.sum(np.logical_and(probs_oos_fraud_sgd<cutoff_OOS_sgd5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_sgd5[m]=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_sgd>=cutoff_OOS_sgd5)
-    ndcg_sgd5[m]=ndcg_k(Y_OOS,probs_oos_fraud_sgd,95)
     
-    FN_sgd5=np.sum(np.logical_and(probs_oos_fraud_sgd<cutoff_OOS_sgd5, \
-                                                  Y_OOS==1))
-    FP_sgd5=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd5, \
-                                                  Y_OOS==0))
-        
-    ecm_sgd5[m]=C_FN*P_f*FN_sgd5/n_P+C_FP*P_nf*FP_sgd5/n_N
     
-    cutoff_OOS_sgd10=np.percentile(probs_oos_fraud_sgd,90)
-    sensitivity_OOS_sgd10[m]=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_sgd10[m]=np.sum(np.logical_and(probs_oos_fraud_sgd<cutoff_OOS_sgd10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_sgd10[m]=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_sgd>=cutoff_OOS_sgd10)
-    ndcg_sgd10[m]=ndcg_k(Y_OOS,probs_oos_fraud_sgd,90)
-    
-    FN_sgd10=np.sum(np.logical_and(probs_oos_fraud_sgd<cutoff_OOS_sgd10, \
-                                                  Y_OOS==1))
-    FP_sgd10=np.sum(np.logical_and(probs_oos_fraud_sgd>=cutoff_OOS_sgd10, \
-                                                  Y_OOS==0))
-        
-    ecm_sgd10[m]=C_FN*P_f*FN_sgd10/n_P+C_FP*P_nf*FP_sgd10/n_N
-    
-    # Adaptive Boosting with logistic regression for weak learners
+    # LogitBoost
     base_lr=LogisticRegression(random_state=0)
     
     clf_ada=AdaBoostClassifier(n_estimators=opt_params_ada['n_estimators'],\
@@ -664,37 +511,6 @@ for yr in range_oos:
         
     ecm_ada1[m]=C_FN*P_f*FN_ada1/n_P+C_FP*P_nf*FP_ada1/n_N
         
-    cutoff_OOS_ada5=np.percentile(probs_oos_fraud_ada,95)
-    sensitivity_OOS_ada5[m]=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada5[m]=np.sum(np.logical_and(probs_oos_fraud_ada<cutoff_OOS_ada5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada5[m]=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada>=cutoff_OOS_ada5)
-    ndcg_ada5[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada,95)
-    
-    FN_ada5=np.sum(np.logical_and(probs_oos_fraud_ada<cutoff_OOS_ada5, \
-                                                  Y_OOS==1))
-    FP_ada5=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada5, \
-                                                  Y_OOS==0))
-        
-    ecm_ada5[m]=C_FN*P_f*FN_ada5/n_P+C_FP*P_nf*FP_ada5/n_N
-    
-    cutoff_OOS_ada10=np.percentile(probs_oos_fraud_ada,90)
-    sensitivity_OOS_ada10[m]=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_ada10[m]=np.sum(np.logical_and(probs_oos_fraud_ada<cutoff_OOS_ada10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_ada10[m]=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_ada>=cutoff_OOS_ada10)
-    ndcg_ada10[m]=ndcg_k(Y_OOS,probs_oos_fraud_ada,90)
-    
-    FN_ada10=np.sum(np.logical_and(probs_oos_fraud_ada<cutoff_OOS_ada5, \
-                                                  Y_OOS==1))
-    FP_ada10=np.sum(np.logical_and(probs_oos_fraud_ada>=cutoff_OOS_ada5, \
-                                                  Y_OOS==0))
-        
-    ecm_ada10[m]=C_FN*P_f*FN_ada10/n_P+C_FP*P_nf*FP_ada10/n_N
     
     # Multi Layer Perceptron
     clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params['hidden_layer_sizes'], \
@@ -730,37 +546,7 @@ for yr in range_oos:
         
     ecm_mlp1[m]=C_FN*P_f*FN_mlp1/n_P+C_FP*P_nf*FP_mlp1/n_N
         
-    cutoff_OOS_mlp5=np.percentile(probs_oos_fraud_mlp,95)
-    sensitivity_OOS_mlp5[m]=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_mlp5[m]=np.sum(np.logical_and(probs_oos_fraud_mlp<cutoff_OOS_mlp5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_mlp5[m]=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_mlp>=cutoff_OOS_mlp5)
-    ndcg_mlp5[m]=ndcg_k(Y_OOS,probs_oos_fraud_mlp,95)
     
-    FN_mlp5=np.sum(np.logical_and(probs_oos_fraud_mlp<cutoff_OOS_mlp5, \
-                                                  Y_OOS==1))
-    FP_mlp5=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp5, \
-                                                  Y_OOS==0))
-        
-    ecm_mlp5[m]=C_FN*P_f*FN_mlp5/n_P+C_FP*P_nf*FP_mlp5/n_N
-    
-    cutoff_OOS_mlp10=np.percentile(probs_oos_fraud_mlp,90)
-    sensitivity_OOS_mlp10[m]=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_mlp10[m]=np.sum(np.logical_and(probs_oos_fraud_mlp<cutoff_OOS_mlp10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_mlp10[m]=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_mlp>=cutoff_OOS_mlp10)
-    ndcg_mlp10[m]=ndcg_k(Y_OOS,probs_oos_fraud_mlp,90)
-    
-    FN_mlp10=np.sum(np.logical_and(probs_oos_fraud_mlp<cutoff_OOS_mlp10, \
-                                                  Y_OOS==1))
-    FP_mlp10=np.sum(np.logical_and(probs_oos_fraud_mlp>=cutoff_OOS_mlp10, \
-                                                  Y_OOS==0))
-        
-    ecm_mlp10[m]=C_FN*P_f*FN_mlp10/n_P+C_FP*P_nf*FP_mlp10/n_N
     
     # Fused approach
     
@@ -800,38 +586,6 @@ for yr in range_oos:
                                                   Y_OOS==0))
         
     ecm_fused1[m]=C_FN*P_f*FN_fused1/n_P+C_FP*P_nf*FP_fused1/n_N
-        
-    cutoff_OOS_fused5=np.percentile(probs_oos_fraud_fused,95)
-    sensitivity_OOS_fused5[m]=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_fused5[m]=np.sum(np.logical_and(probs_oos_fraud_fused<cutoff_OOS_fused5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_fused5[m]=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_fused>=cutoff_OOS_fused5)
-    ndcg_fused5[m]=ndcg_k(Y_OOS,probs_oos_fraud_fused,95)
-    
-    FN_fused5=np.sum(np.logical_and(probs_oos_fraud_fused<cutoff_OOS_fused5, \
-                                                  Y_OOS==1))
-    FP_fused5=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused5, \
-                                                  Y_OOS==0))
-        
-    ecm_fused5[m]=C_FN*P_f*FN_fused5/n_P+C_FP*P_nf*FP_fused5/n_N
-    
-    cutoff_OOS_fused10=np.percentile(probs_oos_fraud_fused,90)
-    sensitivity_OOS_fused10[m]=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_fused10[m]=np.sum(np.logical_and(probs_oos_fraud_fused<cutoff_OOS_fused10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_fused10[m]=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_fused>=cutoff_OOS_fused10)
-    ndcg_fused10[m]=ndcg_k(Y_OOS,probs_oos_fraud_fused,90)
-    
-    FN_fused10=np.sum(np.logical_and(probs_oos_fraud_fused<cutoff_OOS_fused10, \
-                                                  Y_OOS==1))
-    FP_fused10=np.sum(np.logical_and(probs_oos_fraud_fused>=cutoff_OOS_fused10, \
-                                                  Y_OOS==0))
-        
-    ecm_fused10[m]=C_FN*P_f*FN_fused10/n_P+C_FP*P_nf*FP_fused10/n_N
     
 
     
@@ -888,66 +642,6 @@ perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1),\
                                          np.mean(ecm_mlp1),np.mean(ecm_fused1)]
 
 
-perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_svm5),\
-                                 np.mean(sensitivity_OOS_lr5),\
-                                     np.mean(sensitivity_OOS_sgd5),np.mean(sensitivity_OOS_ada5),\
-                                         np.mean(sensitivity_OOS_mlp5),np.mean(sensitivity_OOS_fused5)]
-
-perf_tbl_general['Specificity @ 5 Prc']=[np.mean(specificity_OOS_svm5),\
-                                 np.mean(specificity_OOS_lr5),\
-                                     np.mean(specificity_OOS_sgd5),np.mean(specificity_OOS_ada5),\
-                                         np.mean(specificity_OOS_mlp5),np.mean(specificity_OOS_fused5)]
-
-perf_tbl_general['Precision @ 5 Prc']=[np.mean(precision_svm5),\
-                                 np.mean(precision_lr5),\
-                                     np.mean(precision_sgd5),np.mean(precision_ada5),\
-                                         np.mean(precision_mlp5),np.mean(precision_fused5)]
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5),\
-                                 np.mean(ndcg_lr5),\
-                                     np.mean(ndcg_sgd5),np.mean(ndcg_ada5),\
-                                         np.mean(ndcg_mlp5),np.mean(ndcg_fused5)] 
-
-perf_tbl_general['ECM @ 5 Prc']=[np.mean(ecm_svm5),\
-                                 np.mean(ecm_lr5),\
-                                     np.mean(ecm_sgd5),np.mean(ecm_ada5),\
-                                         np.mean(ecm_mlp5),np.mean(ecm_fused5)]
-
-perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_svm10),\
-                                 np.mean(sensitivity_OOS_lr10),\
-                                     np.mean(sensitivity_OOS_sgd10),np.mean(sensitivity_OOS_ada10),\
-                                         np.mean(sensitivity_OOS_mlp10),np.mean(sensitivity_OOS_fused10)]
-
-
-perf_tbl_general['Specificity @ 10 Prc']=[np.mean(specificity_OOS_svm10),\
-                                 np.mean(specificity_OOS_lr10),\
-                                     np.mean(specificity_OOS_sgd10),np.mean(specificity_OOS_ada10),\
-                                         np.mean(specificity_OOS_mlp10),np.mean(specificity_OOS_fused10)]
-    
-perf_tbl_general['Precision @ 10 Prc']=[np.mean(precision_svm10),\
-                                 np.mean(precision_lr10),\
-                                     np.mean(precision_sgd10),np.mean(precision_ada10),\
-                                         np.mean(precision_mlp10),np.mean(precision_fused10)]
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10),\
-                                 np.mean(ndcg_lr10),\
-                                     np.mean(ndcg_sgd10),np.mean(ndcg_ada10),\
-                                         np.mean(ndcg_mlp10),np.mean(ndcg_fused10)]  
-
-perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10),\
-                                 np.mean(ecm_lr10),\
-                                     np.mean(ecm_sgd10),np.mean(ecm_ada10),\
-                                         np.mean(ecm_mlp10),np.mean(ecm_fused10)]
 
 # perf_tbl_general['F.5 Score @ 1 Prc']=(1+np.power(.5,2))*(perf_tbl_general['Precision @ 1 Prc']*\
 #                                       perf_tbl_general['Sensitivity @ 1 Prc'])/\
@@ -959,26 +653,6 @@ perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10),\
 #                                         ((perf_tbl_general['Precision @ 1 Prc']*np.power(2,2)+\
 #                                           perf_tbl_general['Sensitivity @ 1 Prc']))
     
-# perf_tbl_general['F.5 Score @ 5 Prc']=(1+np.power(.5,2))*(perf_tbl_general['Precision @ 5 Prc']*\
-#                                       perf_tbl_general['Sensitivity @ 5 Prc'])/\
-#                                         ((perf_tbl_general['Precision @ 5 Prc']*np.power(.5,2)+\
-#                                           perf_tbl_general['Sensitivity @ 5 Prc']))
-    
-# perf_tbl_general['F2 Score @ 5 Prc']=(1+np.power(2,2))*(perf_tbl_general['Precision @ 5 Prc']*\
-#                                       perf_tbl_general['Sensitivity @ 5 Prc'])/\
-#                                         ((perf_tbl_general['Precision @ 5 Prc']*np.power(2,2)+\
-#                                           perf_tbl_general['Sensitivity @ 5 Prc']))
-
-# perf_tbl_general['F.5 Score @ 10 Prc']=(1+np.power(.5,2))*(perf_tbl_general['Precision @ 10 Prc']*\
-#                                       perf_tbl_general['Sensitivity @ 10 Prc'])/\
-#                                         ((perf_tbl_general['Precision @ 10 Prc']*np.power(.5,2)+\
-#                                           perf_tbl_general['Sensitivity @ 10 Prc']))
-    
-# perf_tbl_general['F2 Score @ 10 Prc']=(1+np.power(2,2))*(perf_tbl_general['Precision @ 10 Prc']*\
-#                                       perf_tbl_general['Sensitivity @ 10 Prc'])/\
-#                                         ((perf_tbl_general['Precision @ 10 Prc']*np.power(2,2)+\
-#                                           perf_tbl_general['Sensitivity @ 10 Prc']))
-
 
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
@@ -1042,76 +716,6 @@ perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1[2:8]),\
                                      np.mean(ecm_sgd1[2:8]),np.mean(ecm_ada1[2:8]),\
                                          np.mean(ecm_mlp1[2:8]),np.mean(ecm_fused1[2:8])]
 
-perf_tbl_general['Sensitivity @ 5 Prc']=[np.mean(sensitivity_OOS_svm5[2:8]),\
-                                 np.mean(sensitivity_OOS_lr5[2:8]),\
-                                     np.mean(sensitivity_OOS_sgd5[2:8]),np.mean(sensitivity_OOS_ada5[2:8]),\
-                                         np.mean(sensitivity_OOS_mlp5[2:8]),\
-                                             np.mean(sensitivity_OOS_fused5[2:8])]
-
-perf_tbl_general['Specificity @ 5 Prc']=[np.mean(specificity_OOS_svm5[2:8]),\
-                                 np.mean(specificity_OOS_lr5[2:8]),\
-                                     np.mean(specificity_OOS_sgd5[2:8]),\
-                                         np.mean(specificity_OOS_ada5[2:8]),\
-                                         np.mean(specificity_OOS_mlp5[2:8]),\
-                                             np.mean(specificity_OOS_fused5[2:8])]
-
-perf_tbl_general['Precision @ 5 Prc']=[np.mean(precision_svm5[2:8]),\
-                                 np.mean(precision_lr5[2:8]),\
-                                     np.mean(precision_sgd5[2:8]),np.mean(precision_ada5[2:8]),\
-                                         np.mean(precision_mlp5[2:8]),\
-                                             np.mean(precision_fused5[2:8])]
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=[np.mean(ndcg_svm5[2:8]),\
-                                 np.mean(ndcg_lr5[2:8]),\
-                                     np.mean(ndcg_sgd5[2:8]),np.mean(ndcg_ada5[2:8]),\
-                                         np.mean(ndcg_mlp5[2:8]),\
-                                             np.mean(ndcg_fused5[2:8])] 
-perf_tbl_general['ECM @ 5 Prc']=[np.mean(ecm_svm5[2:8]),\
-                                 np.mean(ecm_lr5[2:8]),\
-                                     np.mean(ecm_sgd5[2:8]),np.mean(ecm_ada5[2:8]),\
-                                         np.mean(ecm_mlp5[2:8]),np.mean(ecm_fused5[2:8])]
-
-perf_tbl_general['Sensitivity @ 10 Prc']=[np.mean(sensitivity_OOS_svm10[2:8]),\
-                                 np.mean(sensitivity_OOS_lr10[2:8]),\
-                                     np.mean(sensitivity_OOS_sgd10[2:8]),\
-                                         np.mean(sensitivity_OOS_ada10[2:8]),\
-                                         np.mean(sensitivity_OOS_mlp10[2:8]),\
-                                             np.mean(sensitivity_OOS_fused10[2:8])]
-
-
-perf_tbl_general['Specificity @ 10 Prc']=[np.mean(specificity_OOS_svm10[2:8]),\
-                                 np.mean(specificity_OOS_lr10[2:8]),\
-                                     np.mean(specificity_OOS_sgd10[2:8]),\
-                                         np.mean(specificity_OOS_ada10[2:8]),\
-                                         np.mean(specificity_OOS_mlp10[2:8]),\
-                                             np.mean(specificity_OOS_fused10[2:8])]
-    
-perf_tbl_general['Precision @ 10 Prc']=[np.mean(precision_svm10[2:8]),\
-                                 np.mean(precision_lr1[2:8]),\
-                                     np.mean(precision_sgd10[2:8]),\
-                                         np.mean(precision_ada10[2:8]),\
-                                         np.mean(precision_mlp10[2:8]),\
-                                             np.mean(precision_fused10[2:8])]
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=[np.mean(ndcg_svm10[2:8]),\
-                                 np.mean(ndcg_lr10[2:8]),\
-                                     np.mean(ndcg_sgd10[2:8]),np.mean(ndcg_ada10[2:8]),\
-                                         np.mean(ndcg_mlp10[2:8]),\
-                                             np.mean(ndcg_fused10[2:8])]   
-perf_tbl_general['ECM @ 10 Prc']=[np.mean(ecm_svm10[2:8]),\
-                                 np.mean(ecm_lr10[2:8]),\
-                                     np.mean(ecm_sgd10[2:8]),np.mean(ecm_ada10[2:8]),\
-                                         np.mean(ecm_mlp10[2:8]),np.mean(ecm_fused10[2:8])]
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
