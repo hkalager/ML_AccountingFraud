@@ -44,7 +44,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 29/04/2022
+Last review: 06/05/2022
 """
 import pandas as pd
 import numpy as np
@@ -53,18 +53,22 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.model_selection import GridSearchCV
+from imblearn.ensemble import RUSBoostClassifier
+import rusboost
+from sklearn.model_selection import GridSearchCV,train_test_split
 from sklearn.metrics import roc_auc_score
-#from sklearn.tree import DecisionTreeClassifier
+from sklearn.tree import DecisionTreeClassifier
 from datetime import datetime
 from extra_codes import ndcg_k
-
+import warnings
+warnings.filterwarnings("ignore")
 # start the clock!
 t0=datetime.now()
 # setting the parameters
 IS_period=10
 k_fold=10
-OOS_period=1
+OOS_period=1 # 1 year ahead prediction
+OOS_gap=0 # Gap between training and testing period
 start_OOS_year=2001
 end_OOS_year=2010
 C_FN=30 #relative to C_FP
@@ -107,6 +111,26 @@ print('prior probablity of fraud between 1991-2000 is '+str(np.round(P_f*100,2))
 # redo cross-validation if you wish
 
 if cross_val==True: 
+    
+    print('Grid search hyperparameter optimisation started for RUSBoost')
+    t1=datetime.now()
+    param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
+                         'learning_rate':[1e-4,1e-3,1e-2,.1]}
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                     sampling_strategy=1,random_state=0)
+    clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
+                       n_jobs=-1,cv=k_fold,refit=False)
+    clf_rus.fit(X_CV, Y_CV)
+    opt_params_rus=clf_rus.best_params_
+    n_opt=opt_params_rus['n_estimators']
+    r_opt=opt_params_rus['learning_rate']
+    score_rus=clf_rus.best_score_
+        
+    t2=datetime.now()
+    dt=t2-t1
+    print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
+    print('RUSBoost: The optimal number of estimators is '+str(n_opt))
     
     # optimize SVM grid
     
@@ -230,6 +254,10 @@ if cross_val==True:
     
     print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
 else:
+    n_opt=100
+    r_opt=1e-3
+    score_rus=0.695492921141167
+    
     opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
     C_opt=opt_params_svm['class_weight'][0]
     kernel_opt=opt_params_svm['kernel']
@@ -250,6 +278,16 @@ else:
     score_mlp=0.706333862286029
 
 range_oos=range(start_OOS_year,end_OOS_year+1,OOS_period)
+
+roc_rus=np.zeros(len(range_oos))
+specificity_rus=np.zeros(len(range_oos))
+sensitivity_OOS_rus=np.zeros(len(range_oos))
+precision_rus=np.zeros(len(range_oos))
+sensitivity_OOS_rus1=np.zeros(len(range_oos))
+specificity_OOS_rus1=np.zeros(len(range_oos))
+precision_rus1=np.zeros(len(range_oos))
+ndcg_rus1=np.zeros(len(range_oos))
+ecm_rus1=np.zeros(len(range_oos))
 
 
 roc_svm=np.zeros(len(range_oos))
@@ -323,7 +361,7 @@ for yr in range_oos:
     else:
         year_start_IS=yr-IS_period
     
-    tbl_year_IS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<yr,\
+    tbl_year_IS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<yr-OOS_gap,\
                                                reduced_tbl.fyear>=year_start_IS)]
     tbl_year_IS=tbl_year_IS.reset_index(drop=True)
     misstate_firms=np.unique(tbl_year_IS.gvkey[tbl_year_IS.AAER_DUMMY==1])
@@ -358,7 +396,44 @@ for yr in range_oos:
     n_P=np.sum(Y_OOS==1)
     n_N=np.sum(Y_OOS==0)
     
+    
+    # RUSBoost with 11 ratios
+    
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
+                     learning_rate=r_opt,sampling_strategy=1,random_state=0)
+    clf_rusboost=bao_RUSboost.fit(X, Y)
+    probs_oos_fraud_rus=clf_rusboost.predict_proba(X_OOS)[:,-1]
+    roc_rus[m]=roc_auc_score(Y_OOS,probs_oos_fraud_rus)
+    
+    labels_rus=clf_rusboost.predict(X_OOS)
+    
+    roc_rus[m]=roc_auc_score(Y_OOS,probs_oos_fraud_rus)
+    specificity_rus[m]=np.sum(np.logical_and(labels_rus==0,Y_OOS==0))/\
+        np.sum(Y_OOS==0)
+    if np.sum(labels_rus)>0:
+        sensitivity_OOS_rus[m]=np.sum(np.logical_and(labels_rus==1, \
+                                                 Y_OOS==1))/np.sum(Y_OOS)
+        precision_rus[m]=np.sum(np.logical_and(labels_rus==1,Y_OOS==1))/np.sum(labels_rus)
+    
+    
+    cutoff_OOS_rus=np.percentile(probs_oos_fraud_rus,99)
+    sensitivity_OOS_rus1[m]=np.sum(np.logical_and(probs_oos_fraud_rus>=cutoff_OOS_rus, \
+                                                  Y_OOS==1))/np.sum(Y_OOS)
+    specificity_OOS_rus1[m]=np.sum(np.logical_and(probs_oos_fraud_rus<cutoff_OOS_rus, \
+                                                  Y_OOS==0))/np.sum(Y_OOS==0)
+    precision_rus1[m]=np.sum(np.logical_and(probs_oos_fraud_rus>=cutoff_OOS_rus, \
+                                                 Y_OOS==1))/np.sum(probs_oos_fraud_rus>=cutoff_OOS_rus)
+    ndcg_rus1[m]=ndcg_k(Y_OOS,probs_oos_fraud_rus,99)
+    
+    FN_rus1=np.sum(np.logical_and(probs_oos_fraud_rus<cutoff_OOS_rus, \
+                                                  Y_OOS==1))
+    FP_rus1=np.sum(np.logical_and(probs_oos_fraud_rus>=cutoff_OOS_rus, \
+                                                  Y_OOS==0))
         
+    ecm_rus1[m]=C_FN*P_f*FN_rus1/n_P+C_FP*P_nf*FP_rus1/n_N
+    
+    
     # Support Vector Machines
     
     clf_svm=SVC(class_weight={0:C_opt,1:1},kernel=kernel_opt,shrinking=False,\
@@ -595,8 +670,9 @@ for yr in range_oos:
     m+=1
 
 print('average top percentile sensitivity for the period '+str(start_OOS_year)+' to '+\
-      str(end_OOS_year)+' is '+ str(round(np.mean(sensitivity_OOS_svm1)*100,2))+\
-              '% for SVM vs '+ str(round(np.mean(sensitivity_OOS_lr1)*100,2))+\
+      str(end_OOS_year)+' is '+ str(round(np.mean(sensitivity_OOS_rus1)*100,2))+\
+              '% for RUSBoost vs '+ str(round(np.mean(sensitivity_OOS_svm1)*100,2))+\
+                  '% for SVM vs '+ str(round(np.mean(sensitivity_OOS_lr1)*100,2))+\
               '% for Dechow-LR vs '+ str(round(np.mean(sensitivity_OOS_sgd1)*100,2))+\
                       '% for SGD vs '+ str(round(np.mean(sensitivity_OOS_ada1)*100,2))+\
                           '% for ADA vs '+ str(round(np.mean(sensitivity_OOS_mlp1)*100,2))+\
@@ -606,23 +682,26 @@ print('average top percentile sensitivity for the period '+str(start_OOS_year)+'
 
 # create performance table now
 perf_tbl_general=pd.DataFrame()
-perf_tbl_general['models']=['SVM','LR','SGD','ADA','MLP','FUSED']
-perf_tbl_general['Roc']=[np.mean(roc_svm),np.mean(roc_lr),\
+perf_tbl_general['models']=['RUSBoost','SVM','LR','SGD','ADA','MLP','FUSED']
+perf_tbl_general['Roc']=[np.mean(roc_rus),np.mean(roc_svm),np.mean(roc_lr),\
                          np.mean(roc_sgd),np.mean(roc_ada),\
                              np.mean(roc_mlp),np.mean(roc_fused)]
 
                                             
-perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_svm1),\
+perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_rus1),\
+                                         np.mean(sensitivity_OOS_svm1),\
                                  np.mean(sensitivity_OOS_lr1),\
                                      np.mean(sensitivity_OOS_sgd1),np.mean(sensitivity_OOS_ada1),\
                                          np.mean(sensitivity_OOS_mlp1),np.mean(sensitivity_OOS_fused1)]
 
-perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_svm1),\
+perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_rus1),\
+                                         np.mean(specificity_OOS_svm1),\
                                  np.mean(specificity_OOS_lr1),\
                                      np.mean(specificity_OOS_sgd1),np.mean(specificity_OOS_ada1),\
                                          np.mean(specificity_OOS_mlp1),np.mean(specificity_OOS_fused1)]
 
-perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_svm1),\
+perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_rus1),\
+                                       np.mean(precision_svm1),\
                                  np.mean(precision_lr1),\
                                      np.mean(precision_sgd1),np.mean(precision_ada1),\
                                          np.mean(precision_mlp1),np.mean(precision_fused1)]
@@ -631,12 +710,12 @@ perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
                                       perf_tbl_general['Sensitivity @ 1 Prc'])/\
                                         ((perf_tbl_general['Precision @ 1 Prc']+\
                                           perf_tbl_general['Sensitivity @ 1 Prc']))
-perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1),\
+perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_rus1),np.mean(ndcg_svm1),\
                                  np.mean(ndcg_lr1),\
                                      np.mean(ndcg_sgd1),np.mean(ndcg_ada1),\
                                          np.mean(ndcg_mlp1),np.mean(ndcg_fused1)]
 
-perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1),\
+perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_rus1),np.mean(ecm_svm1),\
                                  np.mean(ecm_lr1),\
                                      np.mean(ecm_sgd1),np.mean(ecm_ada1),\
                                          np.mean(ecm_mlp1),np.mean(ecm_fused1)]
@@ -657,11 +736,13 @@ perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1),\
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_11ratios.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_11ratios.csv'
 else:
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_11ratios.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_11ratios.csv'
 
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
 print(perf_tbl_general)
@@ -673,27 +754,30 @@ print('total run time is '+str(dt_total.total_seconds())+' sec')
 # extract performance for 2003-2008 directly from 2001-2010
 
 perf_tbl_general=pd.DataFrame()
-perf_tbl_general['models']=['SVM','LR','SGD','ADA','MLP','FUSED']
-perf_tbl_general['Roc']=[np.mean(roc_svm[2:8]),np.mean(roc_lr[2:8]),\
+perf_tbl_general['models']=['RUSBoost','SVM','LR','SGD','ADA','MLP','FUSED']
+perf_tbl_general['Roc']=[np.mean(roc_rus[2:8]),np.mean(roc_svm[2:8]),np.mean(roc_lr[2:8]),\
                          np.mean(roc_sgd[2:8]),\
                              np.mean(roc_ada[2:8]),np.mean(roc_mlp[2:8]),np.mean(roc_fused[2:8])]
 
                                             
-perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_svm1[2:8]),\
+perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_rus1[2:8]),\
+                                         np.mean(sensitivity_OOS_svm1[2:8]),\
                                  np.mean(sensitivity_OOS_lr1[2:8]),\
                                      np.mean(sensitivity_OOS_sgd1[2:8]),\
                                          np.mean(sensitivity_OOS_ada1[2:8]),\
                                          np.mean(sensitivity_OOS_mlp1[2:8]),\
                                              np.mean(sensitivity_OOS_fused1[2:8])]
 
-perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_svm1[2:8]),\
+perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_rus1[2:8]),\
+                                         np.mean(specificity_OOS_svm1[2:8]),\
                                  np.mean(specificity_OOS_lr1[2:8]),\
                                      np.mean(specificity_OOS_sgd1[2:8]),\
                                          np.mean(specificity_OOS_ada1[2:8]),\
                                          np.mean(specificity_OOS_mlp1[2:8]),\
                                              np.mean(specificity_OOS_fused1[2:8])]
 
-perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_svm1[2:8]),\
+perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_rus1[2:8]),\
+                                       np.mean(precision_svm1[2:8]),\
                                  np.mean(precision_lr1[2:8]),\
                                      np.mean(precision_sgd1[2:8]),\
                                          np.mean(precision_ada1[2:8]),\
@@ -706,12 +790,14 @@ perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
                                           perf_tbl_general['Sensitivity @ 1 Prc']))
 
 
-perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_svm1[2:8]),\
+perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_rus1[2:8]),\
+                                  np.mean(ndcg_svm1[2:8]),\
                                  np.mean(ndcg_svm1[2:8]),\
                                      np.mean(ndcg_sgd1[2:8]),np.mean(ndcg_ada1[2:8]),\
                                          np.mean(ndcg_mlp1[2:8]),\
                                              np.mean(ndcg_fused1[2:8])]
-perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1[2:8]),\
+perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_rus1[2:8]),\
+                                 np.mean(ecm_svm1[2:8]),\
                                  np.mean(ecm_lr1[2:8]),\
                                      np.mean(ecm_sgd1[2:8]),np.mean(ecm_ada1[2:8]),\
                                          np.mean(ecm_mlp1[2:8]),np.mean(ecm_fused1[2:8])]
@@ -719,9 +805,11 @@ perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_svm1[2:8]),\
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_11ratios.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_11ratios.csv'
 else:
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_11ratios.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+            ',gap='+str(OOS_gap)+'_11ratios.csv'
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)

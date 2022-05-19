@@ -56,7 +56,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 06/12/2021
+Last review: 18/05/2022
 """
 
 
@@ -69,11 +69,13 @@ from sklearn.metrics import roc_auc_score
 from extra_codes import ndcg_k
 import pickle
 import os
+import warnings
+warnings.filterwarnings("ignore")
 
 # start the clock!
 t0=datetime.now()
-# number of 
-OOS_period=1
+OOS_period=1 # 1 year ahead prediction
+OOS_gap=0 # Gap between training and testing period
 IS_period=10
 k_fold=10
 start_OOS_year=2001
@@ -234,16 +236,6 @@ precision_svm1=np.zeros(len(range_oos))
 ndcg_svm1=np.zeros(len(range_oos))
 ecm_svm1=np.zeros(len(range_oos))
 
-sensitivity_OOS_svm5=np.zeros(len(range_oos))
-specificity_OOS_svm5=np.zeros(len(range_oos))
-precision_svm5=np.zeros(len(range_oos))
-ndcg_svm5=np.zeros(len(range_oos))
-ecm_svm5=np.zeros(len(range_oos))
-sensitivity_OOS_svm10=np.zeros(len(range_oos))
-specificity_OOS_svm10=np.zeros(len(range_oos))
-precision_svm10=np.zeros(len(range_oos))
-ndcg_svm10=np.zeros(len(range_oos))
-ecm_svm10=np.zeros(len(range_oos))
 
 m=0
 
@@ -253,7 +245,7 @@ for yr in range_oos:
         year_start_IS=1991
     else:
         year_start_IS=yr-IS_period
-    idx_IS=tbl_ratio_fk[np.logical_and(tbl_ratio_fk.fyear<=yr-1,\
+    idx_IS=tbl_ratio_fk[np.logical_and(tbl_ratio_fk.fyear<yr-OOS_gap,\
                                                tbl_ratio_fk.fyear>=year_start_IS)].index
     tbl_year_IS=tbl_ratio_fk.loc[idx_IS,:]
     misstate_firms=np.unique(tbl_year_IS.gvkey[tbl_year_IS.AAER_DUMMY==1])
@@ -331,38 +323,6 @@ for yr in range_oos:
         
     ecm_svm1[m]=C_FN*P_f*FN_svm1/n_P+C_FP*P_nf*FP_svm1/n_N
         
-    cutoff_OOS_svm5=np.percentile(probs_oos_fraud_svm,95)
-    sensitivity_OOS_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                  Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_svm5[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_svm>=cutoff_OOS_svm5)
-    ndcg_svm5[m]=ndcg_k(Y_OOS,probs_oos_fraud_svm,95)
-    
-    FN_svm5=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm5, \
-                                                  Y_OOS==1))
-    FP_svm5=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm5, \
-                                                  Y_OOS==0))
-        
-    ecm_svm5[m]=C_FN*P_f*FN_svm5/n_P+C_FP*P_nf*FP_svm5/n_N
-    
-    
-    cutoff_OOS_svm10=np.percentile(probs_oos_fraud_svm,90)
-    sensitivity_OOS_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                  Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_svm10[m]=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_svm>=cutoff_OOS_svm10)
-    ndcg_svm10[m]=ndcg_k(Y_OOS,probs_oos_fraud_svm,90)
-    
-    FN_svm10=np.sum(np.logical_and(probs_oos_fraud_svm<cutoff_OOS_svm10, \
-                                                  Y_OOS==1))
-    FP_svm10=np.sum(np.logical_and(probs_oos_fraud_svm>=cutoff_OOS_svm10, \
-                                                  Y_OOS==0))
-        
-    ecm_svm10[m]=C_FN*P_f*FN_svm10/n_P+C_FP*P_nf*FP_svm10/n_N
     
     t2=datetime.now() 
     dt=t2-t1
@@ -394,55 +354,17 @@ perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_svm1)
 
 perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_svm1)
 
-perf_tbl_general['Sensitivity @ 5 Prc']=np.mean(sensitivity_OOS_svm5)
-
-perf_tbl_general['Specificity @ 5 Prc']=np.mean(specificity_OOS_svm5)
-
-perf_tbl_general['Precision @ 5 Prc']=np.mean(precision_svm5)
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=np.mean(ndcg_svm5)
-
-perf_tbl_general['ECM @ 5 Prc']=np.mean(ecm_svm5)
-
-perf_tbl_general['Sensitivity @ 10 Prc']=np.mean(sensitivity_OOS_svm10)
-
-
-perf_tbl_general['Specificity @ 10 Prc']=np.mean(specificity_OOS_svm10)
-    
-perf_tbl_general['Precision @ 10 Prc']=np.mean(precision_svm10)
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=np.mean(ndcg_svm10)  
-perf_tbl_general['ECM @ 10 Prc']=np.mean(ecm_svm10)
-
-perf_tbl_general['Sensitivity']=np.mean(sensitivity_OOS_svm)
-    
-perf_tbl_general['Specificity']=np.mean(specificity_svm)
-
-perf_tbl_general['Precision']=np.mean(precision_svm)
-
-perf_tbl_general['F1 Score']=2*(perf_tbl_general['Precision']*\
-                                      perf_tbl_general['Sensitivity'])/\
-                                        ((perf_tbl_general['Precision']+\
-                                          perf_tbl_general['Sensitivity']))                                             
 
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_SVM_FK.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_SVM_FK.csv'
 else:
     lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_SVM_FK.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_SVM_FK.csv'
 
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
 print(perf_tbl_general)
@@ -473,37 +395,6 @@ perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_svm1[2:8])
 
 perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_svm1[2:8])
 
-perf_tbl_general['Sensitivity @ 5 Prc']=np.mean(sensitivity_OOS_svm5[2:8])
-
-perf_tbl_general['Specificity @ 5 Prc']=np.mean(specificity_OOS_svm5[2:8])
-
-perf_tbl_general['Precision @ 5 Prc']=np.mean(precision_svm5[2:8])
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=np.mean(ndcg_svm5[2:8])
-
-perf_tbl_general['ECM @ 5 Prc']=np.mean(ecm_svm5[2:8])
-
-perf_tbl_general['Sensitivity @ 10 Prc']=np.mean(sensitivity_OOS_svm10[2:8])
-
-
-perf_tbl_general['Specificity @ 10 Prc']=np.mean(specificity_OOS_svm10[2:8])
-    
-perf_tbl_general['Precision @ 10 Prc']=np.mean(precision_svm10[2:8])
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=np.mean(ndcg_svm10[2:8])  
-
-perf_tbl_general['ECM @ 10 Prc']=np.mean(ecm_svm10[2:8])
-
 perf_tbl_general['Sensitivity']=np.mean(sensitivity_OOS_svm[2:8])
     
 perf_tbl_general['Specificity']=np.mean(specificity_svm[2:8])
@@ -518,9 +409,11 @@ perf_tbl_general['F1 Score']=2*(perf_tbl_general['Precision']*\
 if case_window=='expanding':
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_SVM_FK.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_SVM_FK.csv'
 else:
     lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-        str(k_fold)+'fold'+',serial='+str(adjust_serial)+'_SVM_FK.csv'
+        str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+        ',gap='+str(OOS_gap)+'_SVM_FK.csv'
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)

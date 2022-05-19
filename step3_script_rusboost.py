@@ -32,34 +32,35 @@ Steps:
     1. Estimating the performance for each OOS period.
 
 Warnings: 
-    – Running this code can take up to 180 mins. 
-    These figures are estimates based on a MacBook Pro 2017.
+    – Running this code can take up to 120 mins. 
+    These figures are estimates based on a MacBook Pro 2020.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 21/10/2021
+Last review: 19/05/2022
 """
 
 
 import pandas as pd
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
 from datetime import datetime
-import rusboost
+from imblearn.ensemble import RUSBoostClassifier
 from sklearn.metrics import roc_auc_score
 from extra_codes import ndcg_k
-
-
+import warnings
+warnings.filterwarnings("ignore")
 
 t0=datetime.now()
 
-OOS_period=1
+OOS_period=1 # 1 year ahead prediction
+OOS_gap=0 # Gap between training and testing period
 start_OOS_year=2001
 end_OOS_year=2010
 C_FN=30 #relative to C_FP
-C_FP=1 
+C_FP=1
 k_fold=10
 adjust_serial=True
 cross_val=False
@@ -95,39 +96,32 @@ if cross_val==True:
     
     print('Grid search hyperparameter optimisation started for RUSBoost')
     t1=datetime.now()
-    param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000]}
-    avg_roc=[]
-    for n_est in param_grid_rusboost['n_estimators']:
-        roc_=[]
-        for s in range(k_fold):
-            X_train, X_test, y_train, y_test = train_test_split(X_CV,Y_CV,\
-                                                    test_size=1/k_fold,\
-                                                        random_state=s)
-            base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=rusboost.RUSBoost(base_estimator=base_tree,\
-                             learning_rate=.1,min_ratio=1,random_state=0,\
-                                 n_estimators=n_est)
-            clf_rusboost=bao_RUSboost.fit(X_train, y_train)
-            test_probs=clf_rusboost.predict_proba(X_test)[:,-1]
-            roc_.append(roc_auc_score(y_test,test_probs))
-        avg_roc.append(np.mean(roc_))
-            
-    n_opt=param_grid_rusboost['n_estimators'][np.where(avg_roc==np.max(avg_roc))[0][0]]
-    
+    param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
+                         'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1]}
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                     sampling_strategy=1,random_state=0)
+    clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
+                       n_jobs=-1,cv=k_fold,refit=False)
+    clf_rus.fit(X_CV, Y_CV)
+    opt_params_rus=clf_rus.best_params_
+    n_opt=opt_params_rus['n_estimators']
+    r_opt=opt_params_rus['learning_rate']
+    score_rus=clf_rus.best_score_        
     t2=datetime.now()
     dt=t2-t1
     print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
     print('RUSBoost: The optimal number of estimators is '+str(n_opt))
 else:
-    n_opt=200
+    n_opt=1000
+    r_opt=1e-4
+    score_rus28=0.6505273864153011
     #n_opt=3000
     print('Cross-validation skipped ... number of estimators='+str(n_opt))
 
 
 # Setting as proposed in Bao et al (2020)
-base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-bao_RUSboost=rusboost.RUSBoost(base_estimator=base_tree,n_estimators=n_opt,\
-                             learning_rate=.1,min_ratio=1,random_state=0)
+
 
 roc_rusboost=np.zeros(len(range_oos))
 specificity_rusboost=np.zeros(len(range_oos))
@@ -139,25 +133,13 @@ precision_rusboost1=np.zeros(len(range_oos))
 ndcg_rusboost1=np.zeros(len(range_oos))
 ecm_rusboost1=np.zeros(len(range_oos))
 
-sensitivity_OOS_rusboost5=np.zeros(len(range_oos))
-specificity_OOS_rusboost5=np.zeros(len(range_oos))
-precision_rusboost5=np.zeros(len(range_oos))
-ndcg_rusboost5=np.zeros(len(range_oos))
-ecm_rusboost5=np.zeros(len(range_oos))
-
-sensitivity_OOS_rusboost10=np.zeros(len(range_oos))
-specificity_OOS_rusboost10=np.zeros(len(range_oos))
-precision_rusboost10=np.zeros(len(range_oos))
-ndcg_rusboost10=np.zeros(len(range_oos))
-ecm_rusboost10=np.zeros(len(range_oos))
-
 m=0
 
 for yr in range_oos:
     t1=datetime.now()
     
     year_start_IS=1991
-    tbl_year_IS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<yr,\
+    tbl_year_IS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<yr-OOS_gap,\
                                                reduced_tbl.fyear>=year_start_IS)]
     tbl_year_IS=tbl_year_IS.reset_index(drop=True)
     misstate_firms=np.unique(tbl_year_IS.gvkey[tbl_year_IS.AAER_DUMMY==1])
@@ -177,17 +159,21 @@ for yr in range_oos:
     tbl_year_OOS=tbl_year_OOS.reset_index(drop=True)
     
     X=tbl_year_IS.iloc[:,-28:]
-    
+    mean_vals=np.mean(X)
+    std_vals=np.std(X)
+    X=(X-mean_vals)/std_vals
     Y=tbl_year_IS.AAER_DUMMY
     
     X_OOS=tbl_year_OOS.iloc[:,-28:]
-    #X_OOS=(X_OOS-mean_vals)/std_vals
+    X_OOS=(X_OOS-mean_vals)/std_vals
     
     Y_OOS=tbl_year_OOS.AAER_DUMMY
     
     n_P=np.sum(Y_OOS==1)
     n_N=np.sum(Y_OOS==0)
-    
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
+                     learning_rate=r_opt,sampling_strategy=1,random_state=0)
     clf_rusboost = bao_RUSboost.fit(X,Y)
     
     probs_oos_fraud_rusboost=clf_rusboost.predict_proba(X_OOS)[:,-1]
@@ -219,37 +205,6 @@ for yr in range_oos:
         
     ecm_rusboost1[m]=C_FN*P_f*FN_rusboost1/n_P+C_FP*P_nf*FP_rusboost1/n_N
     
-    cutoff_OOS_rusboost5=np.percentile(probs_oos_fraud_rusboost,95)
-    sensitivity_OOS_rusboost5[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost5, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_rusboost5[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost<cutoff_OOS_rusboost5, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_rusboost5[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost5, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost5)
-    ndcg_rusboost5[m]=ndcg_k(Y_OOS,probs_oos_fraud_rusboost,95)
-    
-    FN_rusboost5=np.sum(np.logical_and(probs_oos_fraud_rusboost<cutoff_OOS_rusboost5, \
-                                                  Y_OOS==1))
-    FP_rusboost5=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost5, \
-                                                  Y_OOS==0))
-        
-    ecm_rusboost5[m]=C_FN*P_f*FN_rusboost5/n_P+C_FP*P_nf*FP_rusboost5/n_N
-    
-    cutoff_OOS_rusboost10=np.percentile(probs_oos_fraud_rusboost,90)
-    sensitivity_OOS_rusboost10[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost10, \
-                                                 Y_OOS==1))/np.sum(Y_OOS)
-    specificity_OOS_rusboost10[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost<cutoff_OOS_rusboost10, \
-                                                  Y_OOS==0))/np.sum(Y_OOS==0)
-    precision_rusboost10[m]=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost10, \
-                                                 Y_OOS==1))/np.sum(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost10)
-    ndcg_rusboost10[m]=ndcg_k(Y_OOS,probs_oos_fraud_rusboost,90)
-    
-    FN_rusboost10=np.sum(np.logical_and(probs_oos_fraud_rusboost<cutoff_OOS_rusboost10, \
-                                                  Y_OOS==1))
-    FP_rusboost10=np.sum(np.logical_and(probs_oos_fraud_rusboost>=cutoff_OOS_rusboost10, \
-                                                  Y_OOS==0))
-        
-    ecm_rusboost10[m]=C_FN*P_f*FN_rusboost10/n_P+C_FP*P_nf*FP_rusboost10/n_N
     
     t2=datetime.now() 
     dt=t2-t1
@@ -281,41 +236,11 @@ perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_rusboost1)
 
 perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_rusboost1)
 
-perf_tbl_general['Sensitivity @ 5 Prc']=np.mean(sensitivity_OOS_rusboost5)
-
-perf_tbl_general['Specificity @ 5 Prc']=np.mean(specificity_OOS_rusboost5)
-
-perf_tbl_general['Precision @ 5 Prc']=np.mean(precision_rusboost5)
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=np.mean(ndcg_rusboost5)
-
-perf_tbl_general['ECM @ 5 Prc']=np.mean(ecm_rusboost5)
-
-perf_tbl_general['Sensitivity @ 10 Prc']=np.mean(sensitivity_OOS_rusboost10)
-
-
-perf_tbl_general['Specificity @ 10 Prc']=np.mean(specificity_OOS_rusboost10)
-    
-perf_tbl_general['Precision @ 10 Prc']=np.mean(precision_rusboost10)
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=np.mean(ndcg_rusboost10)  
-
-perf_tbl_general['ECM @ 10 Prc']=np.mean(ecm_rusboost10)
            
 
 lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
         '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
-            '_RUSBoost.csv'
+            ',gap='+str(OOS_gap)+'_RUSBoost.csv'
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
 print(perf_tbl_general)
 t_last=datetime.now()
@@ -344,40 +269,11 @@ perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_rusboost1[2:8])
 
 perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_rusboost1[2:8])
 
-perf_tbl_general['Sensitivity @ 5 Prc']=np.mean(sensitivity_OOS_rusboost5[2:8])
 
-perf_tbl_general['Specificity @ 5 Prc']=np.mean(specificity_OOS_rusboost5[2:8])
-
-perf_tbl_general['Precision @ 5 Prc']=np.mean(precision_rusboost5[2:8])
-
-perf_tbl_general['F1 Score @ 5 Prc']=2*(perf_tbl_general['Precision @ 5 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 5 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 5 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 5 Prc']))
-                                            
-perf_tbl_general['NDCG @ 5 Prc']=np.mean(ndcg_rusboost5[2:8])
-
-perf_tbl_general['ECM @ 5 Prc']=np.mean(ecm_rusboost5[2:8])
-
-perf_tbl_general['Sensitivity @ 10 Prc']=np.mean(sensitivity_OOS_rusboost10[2:8])
-
-
-perf_tbl_general['Specificity @ 10 Prc']=np.mean(specificity_OOS_rusboost10[2:8])
-    
-perf_tbl_general['Precision @ 10 Prc']=np.mean(precision_rusboost10[2:8])
-
-perf_tbl_general['F1 Score @ 10 Prc']=2*(perf_tbl_general['Precision @ 10 Prc']*\
-                                      perf_tbl_general['Sensitivity @ 10 Prc'])/\
-                                        ((perf_tbl_general['Precision @ 10 Prc']+\
-                                          perf_tbl_general['Sensitivity @ 10 Prc']))
-                                            
-perf_tbl_general['NDCG @ 10 Prc']=np.mean(ndcg_rusboost10[2:8])  
-
-perf_tbl_general['ECM @ 10 Prc']=np.mean(ecm_rusboost10[2:8])
 
                                            
 
 lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
         '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
-            '_RUSBoost.csv'
+            ',gap='+str(OOS_gap)+'_RUSBoost.csv'
 perf_tbl_general.to_csv(lbl_perf_tbl,index=False)

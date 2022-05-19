@@ -3,10 +3,18 @@
 """
 Created on Fri Jun 11 13:38:08 2021
 
-This code is calculating NDCG@k based on Bao et al (2020)
+This script checks whether the necessary packages are imported in
+Python and also includes a function for NDCG.
+
+
+The NDCG@k function is based on Bao et al (2020)
 Original codes in Matlab are obtained from 
 https://github.com/JarFraud/FraudDetection/blob/master/evaluate.m
-@author: arman
+
+@author: Arman Hassanniakalager GitHub: https://github.com/hkalager
+Common disclaimers apply. Subject to change at all time.
+
+Last review: 19/05/2022
 """
 import sys
 import subprocess
@@ -43,7 +51,7 @@ found_sklearn = sklearn_spec is not None
 
 if found_sklearn==False:
     _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'sklearn'])
+                           'scikit-learn'])
 
 
 statsmodels_spec = importlib.util.find_spec("statsmodels")
@@ -54,7 +62,12 @@ if found_statsmodels==False:
                            'statsmodels'])
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
+imblearn_spec = importlib.util.find_spec("imblearn")
+found_imblearn = imblearn_spec is not None
 
+if found_imblearn==False:
+    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
+                           'imblearn'])
 # Define necessary modules
 
 

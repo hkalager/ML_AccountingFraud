@@ -39,7 +39,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 29/04/2022
+Last review: 18/05/2022
 """
 import pandas as pd
 import numpy as np
@@ -50,6 +50,8 @@ from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 from datetime import datetime
 from extra_codes import ndcg_k
+import warnings
+warnings.filterwarnings("ignore")
 
 # start the clock!
 t0=datetime.now()

@@ -57,28 +57,31 @@ Steps:
 
 Warnings: 
     – This code requires a pickle file from running the SVM FK script. 
-    – Running this code can take up to 210 mins if the Financial Kernel pickle 
+    – Running this code can take up to 120 mins if the Financial Kernel pickle 
     file is already loaded.
-    These figures are estimates based on a MacBook Pro 2017.
+    These figures are estimates based on a MacBook Pro 2020.
 
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 15/02/2022
+Last review: 19/05/2022
 """
 import pandas as pd
 import numpy as np
+from scipy.stats import mannwhitneyu
 from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import AdaBoostClassifier
-import rusboost
+from imblearn.ensemble import RUSBoostClassifier
 from datetime import datetime
 import pickle
 import os
 from statsmodels.stats.weightstats import ttest_ind
+import warnings
+warnings.filterwarnings("ignore")
 
 # start the clock!
 t0=datetime.now()
@@ -110,6 +113,10 @@ tbl_fk_svm.pop('sstk')
 
 # cross-validation optimised parameters used below for the ratio-based ML models
 
+n_opt=1000
+r_opt=1e-4
+score_rus28=0.6505273864153011
+
 opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
 C_opt=opt_params_svm['class_weight'][0]
 kernel_opt=opt_params_svm['kernel']
@@ -128,11 +135,6 @@ score_ada=0.700229450411913
 opt_params={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
 score_mlp=0.706333862286029
 
-# Optimised setting for Bao et al (2020) – RUSBoost
-n_opt=200
-base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-bao_RUSboost=rusboost.RUSBoost(base_estimator=base_tree,n_estimators=n_opt,\
-                             learning_rate=.1,min_ratio=1,random_state=0)
  
 # Optimised setting for Cecchini et al (2010) – SVM Kernel
 opt_params_svm_fk={'class_weight':{0: 0.02, 1: 1}}
@@ -151,22 +153,35 @@ range_oos=range(start_OOS_year,end_OOS_year+1,OOS_period)
 
 precision_rus1=np.zeros(len(range_oos))
 avg_early_rus1=np.zeros(len(range_oos))
+med_early_rus1=np.zeros(len(range_oos))
 
 precision_svm_fk1=np.zeros(len(range_oos))
 avg_early_svm_fk1=np.zeros(len(range_oos))
+med_early_svm_fk1=np.zeros(len(range_oos))
 
 precision_svm1=np.zeros(len(range_oos))
 avg_early_svm1=np.zeros(len(range_oos))
+med_early_svm1=np.zeros(len(range_oos))
+
 precision_lr1=np.zeros(len(range_oos))
 avg_early_lr1=np.zeros(len(range_oos))
+med_early_lr1=np.zeros(len(range_oos))
+
 precision_sgd1=np.zeros(len(range_oos))
 avg_early_sgd1=np.zeros(len(range_oos))
+med_early_sgd1=np.zeros(len(range_oos))
+
 precision_ada1=np.zeros(len(range_oos))
 avg_early_ada1=np.zeros(len(range_oos))
+med_early_ada1=np.zeros(len(range_oos))
+
 precision_mlp1=np.zeros(len(range_oos))
 avg_early_mlp1=np.zeros(len(range_oos))
+med_early_mlp1=np.zeros(len(range_oos))
+
 precision_fused1=np.zeros(len(range_oos))
 avg_early_fused1=np.zeros(len(range_oos))
+med_early_fused1=np.zeros(len(range_oos))
 
 m=0
 for yr in range_oos:
@@ -277,10 +292,14 @@ for yr in range_oos:
             when_detect=forward_misstatement['fyear'][idx_detect]
     if len(when_detect)>0:
         avg_early_svm_fk1[m]=np.mean(when_detect-yr)
+        med_early_svm_fk1=np.median(when_detect-yr)
     
     precision_svm_fk1[m]=forward_alarm_svm_fk1/len(idx_top_1fk)
     
     # RUSBoost of Bao et al 2020
+    base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+    bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
+                     learning_rate=r_opt,sampling_strategy=1,random_state=0)
     clf_rusboost = bao_RUSboost.fit(X_rus,Y)
     probs_oos_fraud_rus=clf_rusboost.predict_proba(X_rus_OOS)[:,-1]
     
@@ -299,6 +318,7 @@ for yr in range_oos:
             when_detect=forward_misstatement['fyear'][idx_detect]
     if len(when_detect)>0:
         avg_early_rus1[m]=np.mean(when_detect-yr)
+        med_early_rus1[m]=np.median(when_detect-yr)
     
     precision_rus1[m]=forward_alarm_rus1/len(idx_top1rus)
     
@@ -331,6 +351,7 @@ for yr in range_oos:
             when_detect=forward_misstatement['fyear'][idx_detect]
     if len(when_detect)>0:
         avg_early_svm1[m]=np.mean(when_detect-yr)
+        med_early_svm1[m]=np.median(when_detect-yr)
     
     precision_svm1[m]=forward_alarm_svm1/len(idx_top1svm)
     
@@ -361,6 +382,7 @@ for yr in range_oos:
     
     if len(when_detect)>0:
         avg_early_lr1[m]=np.mean(when_detect-yr)
+        med_early_lr1[m]=np.median(when_detect-yr)
     precision_lr1[m]=forward_alarm_lr1/len(idx_top1lr)
    
     
@@ -389,6 +411,7 @@ for yr in range_oos:
     
     if len(when_detect)>0:
         avg_early_sgd1[m]=np.mean(when_detect-yr)
+        med_early_sgd1[m]=np.median(when_detect-yr)
     precision_sgd1[m]=forward_alarm_sgd1/len(idx_top1sgd)
     
     
@@ -417,6 +440,7 @@ for yr in range_oos:
     
     if len(when_detect)>0:
         avg_early_ada1[m]=np.mean(when_detect-yr)
+        med_early_ada1[m]=np.median(when_detect-yr)
     precision_ada1[m]=forward_alarm_ada1/len(idx_top1ada)
 
     
@@ -443,6 +467,7 @@ for yr in range_oos:
     
     if len(when_detect)>0:
         avg_early_mlp1[m]=np.mean(when_detect-yr)
+        med_early_mlp1[m]=np.median(when_detect-yr)
     precision_mlp1[m]=forward_alarm_mlp1/len(idx_top1mlp)
    
     
@@ -474,6 +499,7 @@ for yr in range_oos:
     
     if len(when_detect)>0:
         avg_early_fused1[m]=np.mean(when_detect-yr)
+        med_early_fused1[m]=np.median(when_detect-yr)
     precision_fused1[m]=forward_alarm_fused1/len(idx_top1fused)
     
     t2=datetime.now() 
@@ -511,6 +537,18 @@ pval_sgd=ttest_ind(precision_svm1,precision_sgd1,alternative='smaller')[1]
 pval_ada=ttest_ind(precision_svm1,precision_ada1,alternative='smaller')[1]
 pval_mlp=ttest_ind(precision_svm1,precision_mlp1,alternative='smaller')[1]
 pval_fused=ttest_ind(precision_svm1,precision_fused1,alternative='smaller')[1]
+# SGD and LogitBoost are significant
+
+pval_mw_svm_fk=mannwhitneyu(precision_svm1,precision_svm_fk1,alternative='less')[1]
+pval_mw_rus=mannwhitneyu(precision_svm1,precision_rus1,alternative='less')[1]
+pval_mw_svm=mannwhitneyu(precision_svm1,precision_svm1,alternative='less')[1]
+pval_mw_lr=mannwhitneyu(precision_svm1,precision_lr1,alternative='less')[1]
+pval_mw_sgd=mannwhitneyu(precision_svm1,precision_sgd1,alternative='less')[1]
+pval_mw_ada=mannwhitneyu(precision_svm1,precision_ada1,alternative='less')[1]
+pval_mw_mlp=mannwhitneyu(precision_svm1,precision_mlp1,alternative='less')[1]
+pval_mw_fused=mannwhitneyu(precision_svm1,precision_fused1,alternative='less')[1]
+# Only LogitBoost is significant
+
 
 forward_tbl['ttest pval']=[pval_svm_fk,pval_rus,pval_svm,pval_lr,pval_sgd,\
                                  pval_ada,pval_mlp,pval_fused]
@@ -521,8 +559,13 @@ forward_tbl['Std Forward Precision']=[np.std(precision_svm_fk1),\
                                      np.std(precision_sgd1),np.std(precision_ada1),\
                                          np.std(precision_mlp1),np.std(precision_fused1)]
 
-    
-    
+forward_tbl['Median Forward Precision']=[np.median(precision_svm_fk1),\
+                                       np.median(precision_rus1),np.median(precision_svm1),\
+                                 np.median(precision_lr1),\
+                                     np.median(precision_sgd1),np.median(precision_ada1),\
+                                         np.median(precision_mlp1),np.median(precision_fused1)]    
+
+
 # Measure the average number of years where a correct prediction is made 
 
 
@@ -531,20 +574,46 @@ forward_tbl['Mean Year Ahead']=[np.mean(avg_early_svm_fk1),np.mean(avg_early_rus
                                      np.mean(avg_early_sgd1),np.mean(avg_early_ada1),\
                                          np.mean(avg_early_mlp1),np.mean(avg_early_fused1)]
 
+pval_when_svm_fk=ttest_ind(avg_early_svm1,avg_early_svm_fk1,alternative='smaller')[1]
+pval_when_rus=ttest_ind(avg_early_svm1,avg_early_rus1,alternative='smaller')[1]
+pval_when_svm=ttest_ind(avg_early_svm1,avg_early_svm1,alternative='smaller')[1]
+pval_when_lr=ttest_ind(avg_early_svm1,avg_early_lr1,alternative='smaller')[1]
+pval_when_sgd=ttest_ind(avg_early_svm1,avg_early_sgd1,alternative='smaller')[1]
+pval_when_ada=ttest_ind(avg_early_svm1,avg_early_ada1,alternative='smaller')[1]
+pval_when_mlp=ttest_ind(avg_early_svm1,avg_early_mlp1,alternative='smaller')[1]
+pval_when_fused=ttest_ind(avg_early_svm1,avg_early_fused1,alternative='smaller')[1]    
+# None where significant
+
+pval_mw_when_svm_fk=mannwhitneyu(avg_early_svm1,avg_early_svm_fk1,alternative='less')[1]
+pval_mw_when_rus=mannwhitneyu(avg_early_svm1,avg_early_rus1,alternative='less')[1]
+pval_mw_when_svm=mannwhitneyu(avg_early_svm1,avg_early_svm1,alternative='less')[1]
+pval_mw_when_lr=mannwhitneyu(avg_early_svm1,avg_early_lr1,alternative='less')[1]
+pval_mw_when_sgd=mannwhitneyu(avg_early_svm1,avg_early_sgd1,alternative='less')[1]
+pval_mw_when_ada=mannwhitneyu(avg_early_svm1,avg_early_ada1,alternative='less')[1]
+pval_mw_when_mlp=mannwhitneyu(avg_early_svm1,avg_early_mlp1,alternative='less')[1]
+pval_mw_when_fused=mannwhitneyu(avg_early_svm1,avg_early_fused1,alternative='less')[1]   
+# Only LogitBoost is significant
+
+
 forward_tbl['Std Year Ahead']=[np.std(avg_early_svm_fk1),np.std(avg_early_rus1),\
                                np.std(avg_early_svm1),np.std(avg_early_lr1),\
                                      np.std(avg_early_sgd1),np.std(avg_early_ada1),\
                                          np.std(avg_early_mlp1),np.std(avg_early_fused1)]
 
-forward_tbl['Min Year Ahead']=[np.min(avg_early_svm_fk1),np.min(avg_early_rus1),\
-                               np.min(avg_early_svm1),np.min(avg_early_lr1),\
-                                     np.min(avg_early_sgd1),np.min(avg_early_ada1),\
-                                         np.min(avg_early_mlp1),np.min(avg_early_fused1)]                                            
+forward_tbl['Median Year Ahead']=[np.median(avg_early_svm_fk1),np.median(avg_early_rus1),\
+                                np.median(avg_early_svm1),np.median(avg_early_lr1),\
+                                     np.median(avg_early_sgd1),np.median(avg_early_ada1),\
+                                         np.median(avg_early_mlp1),np.median(avg_early_fused1)]
 
-forward_tbl['Max Year Ahead']=[np.max(avg_early_svm_fk1),np.max(avg_early_rus1),\
-                               np.max(avg_early_svm1), np.max(avg_early_lr1),\
-                                     np.max(avg_early_sgd1),np.max(avg_early_ada1),\
-                                         np.max(avg_early_mlp1),np.max(avg_early_fused1)]                                           
+# forward_tbl['Min Year Ahead']=[np.min(avg_early_svm_fk1),np.min(avg_early_rus1),\
+#                                np.min(avg_early_svm1),np.min(avg_early_lr1),\
+#                                      np.min(avg_early_sgd1),np.min(avg_early_ada1),\
+#                                          np.min(avg_early_mlp1),np.min(avg_early_fused1)]                                            
+
+# forward_tbl['Max Year Ahead']=[np.max(avg_early_svm_fk1),np.max(avg_early_rus1),\
+#                                np.max(avg_early_svm1), np.max(avg_early_lr1),\
+#                                      np.max(avg_early_sgd1),np.max(avg_early_ada1),\
+#                                          np.max(avg_early_mlp1),np.max(avg_early_fused1)]                                           
 
 lbl_perf_tbl='forward_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
     ',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+'.csv'
