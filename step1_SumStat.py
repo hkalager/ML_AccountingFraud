@@ -46,13 +46,16 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 29/04/2022
+Last review: 14/06/2022
 """
 from extra_codes import calc_vif
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+from statsmodels.tsa.stattools import kpss
+import warnings
+warnings.filterwarnings("ignore")
 
 t0=datetime.now()
 print('necessary modules exist and loaded')
@@ -60,15 +63,33 @@ print('necessary modules exist and loaded')
 fraud_df=pd.read_csv('FraudDB2020.csv')
 print('necessary dataset exist and loaded')
 
-fyears_available=np.unique(fraud_df.fyear)
-count_over=count_fraud=np.zeros(fyears_available.shape)
-m=0
-for yr in fyears_available:
-    count_fraud[m]=sum(np.logical_and(fraud_df.fyear==yr,fraud_df.AAER_DUMMY==1))
-    m+=1
+fyears_available=[s for s in range(1991,2010+1)]
+
+count_fraud=[sum(np.logical_and(fraud_df.fyear==yr,fraud_df.AAER_DUMMY==1)) for 
+             yr in fyears_available]
+
+
+count_firms=[np.unique(fraud_df.gvkey[fraud_df.fyear==yr]).shape[0] for 
+             yr in fyears_available]
+
+basic_table=pd.DataFrame()
+basic_table['Year']=fyears_available
+basic_table['Num_fraud']=count_fraud
+basic_table['Num_firm']=count_firms
+basic_table['Fraud/Firm']=basic_table['Num_fraud']/basic_table['Num_firm']
+
+print(' Average number of new frauds per year is '+str(basic_table['Num_fraud'].mean()))
+print(' Average number of unique firms per year is '+str(basic_table['Num_firm'].mean()))
+
+kpss_test_fraud=kpss(basic_table['Fraud/Firm'],regression='c', nlags='auto')
+if kpss_test_fraud[1]<0.1:
+    print('Stationarity rejected ')
+else:
+    print('# fraud/#unique firm is stationary over time ...')
 
 fig, ax = plt.subplots()
-ax.plot(fyears_available,count_fraud,'x:b',label='AAERs')
+X_axis=pd.to_datetime(fyears_available,format='%Y')
+ax.plot(X_axis,count_fraud,'x:b',label='AAERs')
 ax.set_xlabel('Calendar Year')
 ax.set_ylabel('# fraud')
 ax.set_title('Count of fraud')

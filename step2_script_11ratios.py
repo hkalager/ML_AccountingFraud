@@ -44,7 +44,7 @@ Warnings:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 06/05/2022
+Last review: 19/05/2022
 """
 import pandas as pd
 import numpy as np
@@ -54,8 +54,7 @@ from sklearn.svm import SVC
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from imblearn.ensemble import RUSBoostClassifier
-import rusboost
-from sklearn.model_selection import GridSearchCV,train_test_split
+from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
 from datetime import datetime
@@ -111,7 +110,7 @@ print('prior probablity of fraud between 1991-2000 is '+str(np.round(P_f*100,2))
 # redo cross-validation if you wish
 
 if cross_val==True: 
-    
+    # optimize RUSBoost grid
     print('Grid search hyperparameter optimisation started for RUSBoost')
     t1=datetime.now()
     param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
