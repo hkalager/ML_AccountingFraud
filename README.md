@@ -1,6 +1,6 @@
 # ML_AccountingFraud
 
-This code repository is for a project to detect accounting frauds by using machine learning techniques. A preprint will be released soon. For more info see Wiki tab. 
+This code repository is for a project to detect accounting frauds by using machine learning techniques. For more info see Wiki tab. 
 
 
 # Dataset:
