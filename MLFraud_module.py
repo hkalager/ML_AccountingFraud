@@ -1050,7 +1050,7 @@ class ML_Fraud:
             2. Estimating the performance for each OOS period.
 
         Warnings: 
-            – Running this code can take up to 10 mins [if cv_flag is False]. 
+            – Running this code can take up to 10 mins when CV is skipped. 
             These figures are estimates based on a MacBook Pro 2021.
             
         """
@@ -1304,7 +1304,7 @@ class ML_Fraud:
         Parameters:
             – C_FN: Cost of a False Negative for ECM
             – C_FP: Cost of a False Positive for ECM
-            – record_matrix: True/False (default) choice between recording the feature matrix
+            – record_matrix: True (default) /False choice between recording the feature matrix
             and the lagged data table into a pickle file to allow further runs more quickly.
             If True a pickle file of size 900MB is going to be stored on your disk.
 
@@ -1327,10 +1327,8 @@ class ML_Fraud:
             and main analysis ~ 120 mins. These figures are estimates based on a MacBook Pro 2017.
             – To make sure the computations are stored, you can set variable "record_matrix" to True.
             – If "record_matrix==True" the code stores a pickle file of ~ 900MB on your disk.
-            – You can choose to turn cross-validation on/off by setting "cross_val" to True/False
             
         """
-        
         
         
         from sklearn.svm import SVC
