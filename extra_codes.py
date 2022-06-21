@@ -4,7 +4,7 @@
 Created on Fri Jun 11 13:38:08 2021
 
 This script checks whether the necessary packages are imported in
-Python and also includes a function for NDCG.
+Python and also includes two functions for NDCG and VIF.
 
 
 The NDCG@k function is based on Bao et al (2020)
@@ -14,60 +14,13 @@ https://github.com/JarFraud/FraudDetection/blob/master/evaluate.m
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 19/05/2022
+Last review: 21/06/2022
 """
-import sys
-import subprocess
-import importlib
 
-# Check for the necessary modules
-
-
-numpy_spec = importlib.util.find_spec("numpy")
-found_numpy = numpy_spec is not None
-
-if found_numpy==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'numpy'])
 import numpy as np
-
-pandas_spec = importlib.util.find_spec("pandas")
-found_pandas = pandas_spec is not None
-
-if found_pandas==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'pandas'])
 import pandas as pd
-
-matplotlib_spec = importlib.util.find_spec("matplotlib")
-found_matplotlib = matplotlib_spec is not None
-
-if found_matplotlib==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'matplotlib'])
-
-sklearn_spec = importlib.util.find_spec("sklearn")
-found_sklearn = sklearn_spec is not None
-
-if found_sklearn==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'scikit-learn'])
-
-
-statsmodels_spec = importlib.util.find_spec("statsmodels")
-found_statsmodels = statsmodels_spec is not None
-
-if found_statsmodels==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'statsmodels'])
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 
-imblearn_spec = importlib.util.find_spec("imblearn")
-found_imblearn = imblearn_spec is not None
-
-if found_imblearn==False:
-    _=subprocess.check_call([sys.executable, '-m', 'pip', 'install',
-                           'imblearn'])
 # Define necessary modules
 
 
