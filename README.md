@@ -9,6 +9,10 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
 
 # Replication:
 
+In a terminal run the following script to make sure necessary requirements are loaded
+
+`pip install -r requirements.txt`
+
 Run the scripts named `step0_XX.py`, `step1_XX.py`, and so on. The first script stacks the csv files together to create a comprehensive data file. 
 
 # Third party resources:
