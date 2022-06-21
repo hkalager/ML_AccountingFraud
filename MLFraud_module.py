@@ -96,6 +96,7 @@ class ML_Fraud:
         fraud_df=self.df
         sample_start=self.ss
         end_OOS_year=self.ts[-1]
+        IS_per=self.ip
         write=self.w
 
         fyears_available=[s for s in range(sample_start,end_OOS_year+1)]
@@ -195,7 +196,7 @@ class ML_Fraud:
 
         for yr in range_sample:
             tbl_year_IS=fraud_df.loc[np.logical_and(fraud_df.fyear<yr,\
-                                                       fraud_df.fyear>=yr-10)]
+                                                       fraud_df.fyear>=yr-IS_per)]
             tbl_year_IS=tbl_year_IS.reset_index(drop=True)
             misstate_firms=np.unique(tbl_year_IS.gvkey[tbl_year_IS.AAER_DUMMY==1])
             tbl_year_OOS=fraud_df[fraud_df.fyear==yr]
@@ -1049,7 +1050,7 @@ class ML_Fraud:
             2. Estimating the performance for each OOS period.
 
         Warnings: 
-            – Running this code can take up to 120 mins. 
+            – Running this code can take up to 10 mins [if cv_flag is False]. 
             These figures are estimates based on a MacBook Pro 2021.
             
         """
