@@ -9,9 +9,9 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
 
 # Replication:
 
-Run the scripts named "step0_XX.py", "step1_XX.py", and so on. The first script stacks the csv files together to create a comprehensive data file. 
+Run the scripts named `step0_XX.py`, `step1_XX.py`, and so on. The first script stacks the csv files together to create a comprehensive data file. 
 
 # Third party resources:
 1) These scripts use free-to-access Python modules Numpy, Pandas, Statsmodels, Matplotlib, Sklearn, and Imblearn. Please make sure necessary modules are installed on your machine. 
-2) The script "rusboost.py" is from an anonymous online source and I adapted the code to match my programming style.
-3) The script "extra_codes.py" contains a function that was adapted from the Bao et al (2020) code repository at https://github.com/JarFraud/FraudDetection
+2) The script `rusboost.py` is from an anonymous online source and I adapted the code to match my programming style.
+3) The script `extra_codes.py` contains a function that was adapted from the Bao et al (2020) code repository at https://github.com/JarFraud/FraudDetection
