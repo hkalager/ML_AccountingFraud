@@ -4,6 +4,7 @@
 numpy
 pandas
 matplotlib
+scipy
 scikit-learn
 imblearn
 statsmodels
