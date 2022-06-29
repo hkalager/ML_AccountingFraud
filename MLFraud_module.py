@@ -24,6 +24,7 @@ Common disclaimers apply. Subject to change at all time.
 
 Last review: 29/06/2022
 """
+# %matplotlib inline
 import pandas as pd
 import numpy as np
 from os.path import isfile
@@ -35,7 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class ML_Fraud:
-    __version__='1.0.1'
+    __version__='1.0.2'
     def __init__(self,sample_start=1991,test_sample=range(2001,2011),
                  OOS_per=1,OOS_gap=0,sampling='expanding',adjust_serial=True,
                  cv_flag=False,cv_k=10,write=True,IS_per=10):
@@ -79,7 +80,7 @@ class ML_Fraud:
         self.og=OOS_gap
         self.a_s=adjust_serial
         print('Module initiated successfully ...')
-        print('Procedures are sumstats(), analyse_ratio(), analyse_raw(), analyse_fk(), compare_ada(), and analyse_forward()')
+        print('Procedures are sumstats(), analyse_ratio(), analyse_raw(), analyse_fk(), analyse_forward() as the main ones \nIn appendix compare_ada() and compare_logit()')
     
     def sumstats(self):
         """
@@ -122,14 +123,6 @@ class ML_Fraud:
             print('Stationarity rejected ')
         else:
             print('# fraud/#unique firm is stationary over time ...')
-
-        fig, ax = plt.subplots()
-        X_axis=pd.to_datetime(fyears_available,format='%Y')
-        ax.plot(X_axis,count_fraud,'x:b',label='AAERs')
-        ax.set_xlabel('Calendar Year')
-        ax.set_ylabel('# fraud')
-        ax.set_title('Count of fraud')
-        ax.legend()
 
         fraud_df=fraud_df[fraud_df.fyear>=sample_start]
         last_year=np.max(fraud_df.fyear)
@@ -220,14 +213,22 @@ class ML_Fraud:
         if write==True:
             ser_tbl.to_csv('SerialStats.csv',index=False)
             print('Serial fraud results generated successfully ...')
-
+        
         fig, ax = plt.subplots()
-        ax.plot(X_axis,serial_fraud_count,'s:r',label='# serial fraud')
-        ax.plot(X_axis,fraud_count,'s:b',label='# total fraud')
+        X_axis=pd.to_datetime(fyears_available,format='%Y')
+        
+        ax.plot(X_axis,serial_fraud_count,'s:r',label='serial fraud')
+        ax.plot(X_axis,fraud_count,'s:b',label='total fraud')
         ax.set_xlabel('Calendar Year')
-        ax.set_ylabel('# firms')
-        ax.set_title('companies with previous history of misstatement')
+        ax.set_ylabel('# AAERs')
+        ax.set_title('unique firms and AAERs over time')
+        ax2=ax.twinx()
+        ax2.plot(X_axis,count_firms,'^--g',label='unique firm')
+        ax2.set_ylabel('# firms')
         ax.legend()
+        ax2.legend(loc=2)
+        
+        
         print('graphics generated successfully ... ')
         run_time=datetime.now()-t0
         print('Total runtime is '+str(run_time.total_seconds())+' seconds')
