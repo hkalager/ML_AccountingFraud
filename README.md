@@ -41,7 +41,7 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
 
   `IS_per = 10`: Number of calendar years in case a rolling training sample is used.
 
-4) Choose any of the following procedures:
+4) Choose any of the following methods:
 
   `a.sumstats()`: to generate summary statistics and compute variance inflation factors;
   
@@ -51,10 +51,13 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
   
   `a.analyse_fk()`: to generate classification forecasts based on 23 raw financial figures as in Cecchini (2010);
   
+  `a.analyse_forward()`: to generate forward-looking performance results;
+  
   `a.compare_ada()`: to compare LogitBoost with AdaBoost as in appendix; and
   
-  `a.analyse_forward()`: to generate forward-looking performance results. 
+  `a.compare_logit()`: to compare Logit with the Rare Event Logit as in appendix.
 
 # Third party resources:
 * These scripts use free-to-access Python modules Numpy, Pandas, Statsmodels, Matplotlib, Sklearn, and Imblearn. 
-* The script `extra_codes.py` contains a function that was adapted from the Bao et al (2020) code repository at https://github.com/JarFraud/FraudDetection
+* The script `extra_codes.py` contains the class `relogit` based on Rare Event Logistic Regression of [King and Zeng (2001)](https://gking.harvard.edu/files/abs/0s-abs.shtml).
+* The script `extra_codes.py` contains a function that was adapted from the [Bao et al (2020) code repository](https://github.com/JarFraud/FraudDetection).
