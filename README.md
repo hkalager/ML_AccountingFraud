@@ -45,6 +45,11 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
 
   `a.sumstats()`: to generate summary statistics and compute variance inflation factors;
   
+  `a.mc_analysis(adjust_serial=True)`: 
+  
+  to conduct a Monte Carlo simulation for evaluating impact of serial frauds
+  `adjust_serial` can be `True`, `False`, or `"baised"`;
+  
   `a.analyse_ratio()`: to generate classification forecasts based on 11 financial ratios;
   
   `a.analyse_raw()`: to generate classification forecasts based on 28 raw financial figures as in Bao (2020);
