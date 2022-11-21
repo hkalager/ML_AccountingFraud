@@ -22,7 +22,7 @@ Expected columns are:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 29/06/2022
+Last review: 20/11/2022
 """
 # %matplotlib inline
 import pandas as pd
@@ -36,10 +36,10 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class ML_Fraud:
-    __version__='1.0.2'
+    __version__='1.0.5'
     def __init__(self,sample_start=1991,test_sample=range(2001,2011),
                  OOS_per=1,OOS_gap=0,sampling='expanding',adjust_serial=True,
-                 cv_flag=False,cv_k=10,write=True,IS_per=10):
+                 cv_type='kfold',temp_year=1,cv_flag=False,cv_k=10,write=True,IS_per=10):
         """
         Parameters:
             – sample_start: Calendar year marking the start of the sample (Default=1991)
@@ -48,6 +48,7 @@ class ML_Fraud:
             – OOS_gap: Gap between training and testing samples in year (Default=0)
             – sampling: sampling style either "expanding"/"rolling" (Default="expanding")
             – adjust_serial: A boolean variable to adjust for serial frauds (Default=True)
+            – cv_type: A string to determine whether to do a temporal or k-fold cv
             – cv_flag: A boolean variable whether to replicate the cross-validation (Default=False)
             – cv_k: The number of folds (k) in the cross-validation (Default=10)
             – write: A boolean variable whether to write results into csv files (Default=True)
@@ -62,11 +63,16 @@ class ML_Fraud:
                 df=df.append(new_df)
             df.to_csv('FraudDB2020.csv',index=False)
             
-        self.df=pd.read_csv('FraudDB2020.csv')
+        df=pd.read_csv('FraudDB2020.csv')
+        self.df=df
         self.ss=sample_start
+        self.se=np.max(df.fyear)
         self.ts=test_sample
+        self.cv_t=cv_type
         self.cv=cv_flag
         self.cv_k=cv_k
+        self.cv_t_y=temp_year
+        
         sampling_set=['expanding','rolling']
         if sampling in sampling_set:
             pass
@@ -80,7 +86,9 @@ class ML_Fraud:
         self.og=OOS_gap
         self.a_s=adjust_serial
         print('Module initiated successfully ...')
-        print('Procedures are sumstats(), analyse_ratio(), analyse_raw(), analyse_fk(), analyse_forward() as the main ones \nIn appendix compare_ada() and compare_logit()')
+        list_methods=dir(self)
+        reduced_methods=[item+'()' for item in list_methods if any(['analy' in item,'compare' in item,item=='sumstats'])]
+        print('Procedures are: '+'; '.join(reduced_methods))
     
     def sumstats(self):
         """
@@ -96,11 +104,12 @@ class ML_Fraud:
         
         fraud_df=self.df
         sample_start=self.ss
+        sample_end=self.se
         end_OOS_year=self.ts[-1]
         IS_per=self.ip
         write=self.w
 
-        fyears_available=[s for s in range(sample_start,end_OOS_year+1)]
+        fyears_available=[s for s in range(sample_start,sample_end+1)]
 
         count_fraud=[sum(np.logical_and(fraud_df.fyear==yr,fraud_df.AAER_DUMMY==1)) for 
                      yr in fyears_available]
@@ -182,7 +191,7 @@ class ML_Fraud:
 
         
 
-        range_sample=range(sample_start,end_OOS_year+1)
+        range_sample=range(sample_start,sample_end+1)
         serial_fraud_count=np.zeros(len(range_sample))
         fraud_count=np.zeros(len(range_sample))
         m=0
@@ -227,13 +236,241 @@ class ML_Fraud:
         ax2.set_ylabel('# firms')
         ax.legend()
         ax2.legend(loc=2)
-        
+        plt.savefig('Figure1.png')
+        plt.show()
         
         print('graphics generated successfully ... ')
         run_time=datetime.now()-t0
         print('Total runtime is '+str(run_time.total_seconds())+' seconds')
         ## End of Summary Statistics procedure 
+      
+    def mc_analysis(self,B=1000,adjust_serial=None):
+        """
+        This method runs a Monte Carlo simulation to quantify the impact of
+        serial frauds on ratios vs raw variables datasets.
         
+        Parameters:
+            – B: Total number of random boostrap replications 
+            – adjust_serial: treatment for serial frauds as choices of 
+            True/False/ 'biased' where True discards spanning AAER cases in the 
+            testing sample. False ignores the issue, and finally 'biased' treats
+            the serial frauds as done in Bao et al (2020)
+
+        Outputs: 
+        Main results are stored in the table variable "result_tbls" written into
+        a csv file per treatment type named: 
+            'MC_results'+',serial='+str(adjust_serial)+'.csv'
+        
+            
+        """
+        
+        from sklearn.metrics import roc_auc_score
+        from extra_codes import ndcg_k,relogit
+        from statsmodels.discrete.discrete_model import Logit
+        from statsmodels.tools import add_constant
+        
+        t0=datetime.now()
+        # setting the parameters
+        IS_period=self.ip
+        k_fold=self.cv_k
+        OOS_period=self.op # 1 year ahead prediction
+        OOS_gap=self.og # Gap between training and testing period
+        start_OOS_year=self.ts[0]
+        end_OOS_year=self.ts[-1]
+        sample_start=self.ss
+        if adjust_serial==None:
+            adjust_serial=self.a_s
+        cross_val=self.cv
+        case_window=self.sa
+        fraud_df=self.df
+        write=self.w
+        
+        
+        print('starting the MC analysis for case B='+str(B)+', serial treatment='+str(adjust_serial))
+        t000=datetime.now()
+        reduced_tbl_1=fraud_df.iloc[:,[0,1,3,7,8]]
+        reduced_tbl_2=fraud_df.iloc[:,9:-3]
+        reduced_tblset=[reduced_tbl_1,reduced_tbl_2]
+        reduced_tbl=pd.concat(reduced_tblset,axis=1)
+        reduced_tbl=reduced_tbl[reduced_tbl.fyear>=sample_start]
+        reduced_tbl=reduced_tbl[reduced_tbl.fyear<=end_OOS_year]
+
+        # Setting the cross-validation setting
+
+        tbl_year_IS_CV=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<=2010,\
+                                                   reduced_tbl.fyear>=1991)]
+        tbl_year_IS_CV=tbl_year_IS_CV.reset_index(drop=True)
+        
+        X_CV=tbl_year_IS_CV.iloc[:,-11:]
+        
+        Y_CV=tbl_year_IS_CV.AAER_DUMMY
+        
+        
+        X_CV_raw=tbl_year_IS_CV.iloc[:,5:-11]
+        
+        
+        
+        idx_set=tbl_year_IS_CV.index
+        cv_size=X_CV.shape[0]
+        count_train=int(((k_fold-1)/k_fold)*cv_size)
+        
+        
+        roc_set_ratio=[]
+        count_positive_train=[]
+        count_positive_test=[]
+        drop_serial=[]
+        ndcg_ratio=[]
+        sensitivity_ratio=[]
+        specificity_ratio=[]
+        precision_ratio=[]
+        roc_set_raw=[]
+        sensitivity_raw=[]
+        specificity_raw=[]
+        precision_raw=[]
+        ndcg_raw=[]
+        t0=datetime.now()
+        for b in range(0,B):
+            t00=datetime.now()
+            rng = np.random.default_rng(b)
+            train_idx=rng.choice(idx_set,count_train,replace=False)
+            #train_idx=np.random.choice(idx_set,count_train,replace=False,)            
+            test_idx=idx_set.drop(train_idx)
+            mini_tbl_train=tbl_year_IS_CV.iloc[train_idx]
+            mini_tbl_test=tbl_year_IS_CV.iloc[test_idx]
+            #test_idx=rng.choice(idx_set_test,size_test,replace=True)
+            
+            X_train_b=X_CV.iloc[train_idx,:]
+            X_train_raw_b=X_CV_raw.iloc[train_idx,:]
+            Y_train_b=Y_CV.iloc[train_idx]
+            count_positive_train.append(np.sum(Y_train_b))
+            X_test_b=X_CV.iloc[test_idx,:]
+            X_test_raw_b=X_CV_raw.iloc[test_idx,:]
+            Y_test_b=Y_CV.iloc[test_idx]
+            init_positive=np.sum(Y_test_b)
+            count_positive_test.append(init_positive)
+            if adjust_serial==True:
+                misstate_firms_train=np.unique(mini_tbl_train[mini_tbl_train.AAER_DUMMY==1]['gvkey'])
+                
+                idx_is_serial=np.isin(mini_tbl_test['gvkey'],misstate_firms_train)
+                X_test_b=X_test_b[idx_is_serial==False]
+                X_test_raw_b=X_test_raw_b[idx_is_serial==False]
+                Y_test_b=Y_test_b[idx_is_serial==False]
+                                
+                adj_positive=np.sum(Y_test_b)
+                drop_serial.append(init_positive-adj_positive)
+            elif adjust_serial==False:
+                drop_serial.append(0)
+            elif adjust_serial=='biased':
+                init_train=np.sum(Y_train_b)
+                misstate_test=np.unique(mini_tbl_test[mini_tbl_test['AAER_DUMMY']==1]['gvkey'])
+                Y_train_b[np.isin(mini_tbl_train['gvkey'],misstate_test)]=0
+                adj_positive=np.sum(Y_train_b)
+                drop_serial.append(init_train-adj_positive)
+                
+            t01=datetime.now()
+            
+            clf_lr = Logit(Y_train_b,add_constant(X_train_b)).fit(disp=0)
+            predicted_test=clf_lr.predict(add_constant(X_test_b))
+            roc_set_ratio.append(roc_auc_score(Y_test_b,predicted_test))
+            cutoff_ratio=np.percentile(predicted_test,99)
+            labels_ratio=(predicted_test>=cutoff_ratio).astype(int)
+            sensitivity_ratio.append(np.sum(np.logical_and(labels_ratio==1, \
+                                                         Y_test_b==1))/np.sum(Y_test_b))
+            specificity_ratio.append(np.sum(np.logical_and(labels_ratio==0, \
+                                                         Y_test_b==0))/np.sum(Y_test_b==0))
+            precision_ratio.append(np.sum(np.logical_and(labels_ratio==1, \
+                                                         Y_test_b==1))/np.sum(labels_ratio))
+            ndcg_ratio.append(ndcg_k(Y_test_b.to_numpy(),predicted_test.to_numpy(),99))
+            
+            try:
+                clf_lr_raw = Logit(Y_train_b,add_constant(X_train_raw_b)).fit(disp=0)
+                
+                predicted_test_raw=clf_lr_raw.predict(add_constant(X_test_raw_b))
+                predicted_test_raw=predicted_test_raw.to_numpy()
+            except:
+                predicted_test_raw=np.zeros_like(Y_test_b)
+            cutoff_raw=np.percentile(predicted_test_raw,99)
+            labels_raw=(predicted_test_raw>=cutoff_raw).astype(int)
+            sensitivity_raw.append(np.sum(np.logical_and(labels_raw==1, \
+                                                         Y_test_b==1))/np.sum(Y_test_b))
+            specificity_raw.append(np.sum(np.logical_and(labels_raw==0, \
+                                                         Y_test_b==0))/np.sum(Y_test_b==0))
+            precision_raw.append(np.sum(np.logical_and(labels_raw==1, \
+                                                         Y_test_b==1))/np.sum(labels_raw))
+            roc_set_raw.append(roc_auc_score(Y_test_b,predicted_test_raw))
+            ndcg_raw.append(ndcg_k(Y_test_b.to_numpy(),predicted_test_raw,99))
+         
+        
+        t1=datetime.now()
+        dt=t1-t0
+        
+        lbls=['mean','std','median','min','max']
+        ratio_roc=[np.mean(roc_set_ratio),np.std(roc_set_ratio),np.median(roc_set_ratio),np.min(roc_set_ratio),np.max(roc_set_ratio)]
+        raw_roc=[np.mean(roc_set_raw),np.std(roc_set_raw),np.median(roc_set_raw),np.min(roc_set_raw),np.max(roc_set_raw)]
+        
+        train_positive=[np.mean(count_positive_train),np.std(count_positive_train),
+                    np.median(count_positive_train),np.min(count_positive_train),
+                    np.max(count_positive_train)]
+        test_positive=[np.mean(count_positive_test),np.std(count_positive_test),
+                    np.median(count_positive_test),np.min(count_positive_test),
+                    np.max(count_positive_test)]
+        
+        dropped_positive=[np.mean(drop_serial),np.std(drop_serial),
+                    np.median(drop_serial),np.min(drop_serial),
+                    np.max(drop_serial)]
+        
+        ratio_sens=[np.mean(sensitivity_ratio),np.std(sensitivity_ratio),
+                    np.median(sensitivity_ratio),np.min(sensitivity_ratio),
+                    np.max(sensitivity_ratio)]
+        raw_sens=[np.mean(sensitivity_raw),np.std(sensitivity_raw),
+                    np.median(sensitivity_raw),np.min(sensitivity_raw),
+                    np.max(sensitivity_raw)]
+        
+        ratio_spec=[np.mean(specificity_ratio),np.std(specificity_ratio),
+                    np.median(specificity_ratio),np.min(specificity_ratio),
+                    np.max(specificity_ratio)]
+        raw_spec=[np.mean(specificity_raw),np.std(specificity_raw),
+                    np.median(specificity_raw),np.min(specificity_raw),
+                    np.max(specificity_raw)]
+        
+        ratio_prec=[np.mean(precision_ratio),np.std(precision_ratio),
+                    np.median(precision_ratio),np.min(precision_ratio),
+                    np.max(precision_ratio)]
+        raw_prec=[np.mean(precision_raw),np.std(precision_raw),
+                    np.median(precision_raw),np.min(precision_raw),
+                    np.max(precision_raw)]
+        ratio_ndgc=[np.mean(ndcg_ratio),np.std(ndcg_ratio),
+                    np.median(ndcg_ratio),np.min(ndcg_ratio),
+                    np.max(ndcg_ratio)]
+        raw_ndgc=[np.mean(ndcg_raw),np.std(ndcg_raw),
+                    np.median(ndcg_raw),np.min(ndcg_raw),
+                    np.max(ndcg_raw)]
+        result_tbl=pd.DataFrame(data=(lbls,train_positive,test_positive,dropped_positive,
+                                      ratio_roc,raw_roc,ratio_sens,raw_sens,
+                                      ratio_spec,raw_spec,
+                                      ratio_prec,raw_prec,
+                                      ratio_ndgc,raw_ndgc)).transpose()
+        result_tbl.columns=['measure','training positive','testing positive','dropped positive',
+                            'ratio roc','raw roc',
+                            'ratio sensitivity @1','raw sensitivity @1',
+                            'ratio specificity @1','raw specificity @1',
+                            'ratio precision @1','raw precision @1',
+                            'ratio NDGC @1','raw NDGC @1']
+        result_tbl=result_tbl.set_index('measure')
+        result_tbl=result_tbl.transpose()
+        
+        lbl_perf_tbl='MC_results'+',serial='+str(adjust_serial)+',B='+str(B)+'.csv'
+                        
+        if write==True:
+            result_tbl.to_csv(lbl_perf_tbl,index=True)
+        
+        t001=datetime.now()
+        dt00=t001-t000
+        print('MC analysis is completed after '+str(dt00.total_seconds())+' seconds')
+        
+        ## End of Monte Carlo simulation method
+    
+    
     def analyse_ratio(self,C_FN=30,C_FP=1):
         """
         This code uses 11 financial ratios to predict the likelihood of fraud in a financial statement.
@@ -288,9 +525,11 @@ class ML_Fraud:
         end_OOS_year=self.ts[-1]
         sample_start=self.ss
         adjust_serial=self.a_s
+        cv_type=self.cv_t
         cross_val=self.cv
+        temp_year=self.cv_t_y
         case_window=self.sa
-        fraud_df=self.df
+        fraud_df=self.df.copy(deep=True)
         write=self.w
 
         reduced_tbl_1=fraud_df.iloc[:,[0,1,3,7,8]]
@@ -322,132 +561,113 @@ class ML_Fraud:
               str(start_OOS_year-1)+' is '+str(np.round(P_f*100,2))+'%')
 
         # redo cross-validation if you wish
-
-        if cross_val==True: 
-            # optimize RUSBoost grid
-            print('Grid search hyperparameter optimisation started for RUSBoost')
-            t1=datetime.now()
-            param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
-                                 'learning_rate':[1e-4,1e-3,1e-2,.1]}
-            base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
-                             sampling_strategy=1,random_state=0)
-            clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-            clf_rus.fit(X_CV, Y_CV)
-            opt_params_rus=clf_rus.best_params_
-            n_opt=opt_params_rus['n_estimators']
-            r_opt=opt_params_rus['learning_rate']
-            score_rus=clf_rus.best_score_
+        if cv_type=='kfold':
+            if cross_val==True: 
+                # optimize RUSBoost grid
+                print('Grid search hyperparameter optimisation started for RUSBoost')
+                t1=datetime.now()
+                param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
+                                     'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1,1]}
+                base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+                bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                                 sampling_strategy=1,random_state=0)
+                clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
+                                   n_jobs=-1,cv=k_fold,refit=False)
+                clf_rus.fit(X_CV, Y_CV)
+                opt_params_rus=clf_rus.best_params_
+                n_opt_rus=opt_params_rus['n_estimators']
+                r_opt_rus=opt_params_rus['learning_rate']
+                score_rus=clf_rus.best_score_
+                    
+                t2=datetime.now()
+                dt=t2-t1
+                print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
+                print('RUSBoost: The optimal number of estimators is '+str(n_opt_rus))
                 
-            t2=datetime.now()
-            dt=t2-t1
-            print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
-            print('RUSBoost: The optimal number of estimators is '+str(n_opt))
-            
-            # optimize SVM grid
-            
-            print('Grid search hyperparameter optimisation started for SVM')
-            t1=datetime.now()
-            param_grid_svm={'kernel':['linear','rbf','poly'],'class_weight':[\
-                                            {0:2e-3,1:1},{0:5e-3,1:1},
-                                            {0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
-                                            {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
-            base_mdl_svm=SVC(shrinking=False,\
-                                probability=False,random_state=0,max_iter=-1,\
-                                    tol=X_CV.shape[-1]*1e-3)
-            
-            clf_svm = GridSearchCV(base_mdl_svm, param_grid_svm,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-            clf_svm.fit(X_CV, Y_CV)
-            opt_params_svm=clf_svm.best_params_
-            C_opt=opt_params_svm['class_weight'][0]
-            kernel_opt=opt_params_svm['kernel']
-            score_svm=clf_svm.best_score_
-            
-            t2=datetime.now()
-            dt=t2-t1
-            print('SVM CV finished after '+str(dt.total_seconds())+' sec')
-            print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
-            
-            # optimise Logistic Regression – for a regulated Logit
-            #print('Grid search hyperparameter optimisation started for LR')
-            # t1=datetime.now()
-            
-            # param_grid_lr={'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
-            #                                 {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
-            # base_mdl_lr=LogisticRegression(random_state=None)
-            
-            # clf_lr = GridSearchCV(base_mdl_lr, param_grid_lr,scoring='roc_auc',\
-            #                    n_jobs=-1,cv=k_fold,refit=False)
-            # clf_lr.fit(X_CV, Y_CV)
-            # opt_params_lr=clf_lr.best_params_
-            # score_lr=clf_lr.best_score_
-            # C_opt_lr=opt_params_lr['class_weight'][0]
-            # t2=datetime.now()
-            # dt=t2-t1
-            # print('LR CV finished after '+str(dt.total_seconds())+' sec')
-            # print('LR: The optimal C+/C- ratio is '+str(1/C_opt_lr))
-            
-            print('Computing CV ROC for LR ...')
-            t1=datetime.now()
-            score_lr=[]            
-            for m in range(0,k_fold):
-                train_sample,test_sample=train_test_split(Y_CV,test_size=1/
-                                                          k_fold,shuffle=False,random_state=m)
-                X_train=X_CV.iloc[train_sample.index]
-                X_train=add_constant(X_train)
-                Y_train=train_sample
-                X_test=X_CV.iloc[test_sample.index]
-                X_test=add_constant(X_test)
-                Y_test=test_sample
+                # optimize SVM grid
                 
-                logit_model=Logit(Y_train,X_train)
-                logit_model=logit_model.fit(disp=0)
-                pred_LR_CV=logit_model.predict(X_test)
-                score_lr.append(roc_auc_score(Y_test,pred_LR_CV))
-            
+                print('Grid search hyperparameter optimisation started for SVM')
+                t1=datetime.now()
+                param_grid_svm={'kernel':['linear','rbf','poly'],'class_weight':[\
+                                                {0:2e-3,1:1},{0:5e-3,1:1},
+                                                {0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+                                                {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                base_mdl_svm=SVC(shrinking=False,\
+                                    probability=False,random_state=0,max_iter=-1,\
+                                        tol=X_CV.shape[-1]*1e-3)
                 
-            score_lr=np.mean(score_lr)
-            
-            t2=datetime.now()
-            dt=t2-t1
-            print('LR CV finished after '+str(dt.total_seconds())+' sec')
-            
-            # optimise SGD
-            print('Grid search hyperparameter optimisation started for SGD')
-            t1=datetime.now()
-            
-            param_grid_sgd={'penalty':['l1','l2'],'loss':['log','modified_huber'],\
-                            'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},\
-                                            {0:2e-2,1:1},{0:5e-2,1:1},{0:1e-1,1:1},\
-                                                {0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
-            base_mdl_sgd=SGDClassifier(random_state=0,validation_fraction=.2,shuffle=False)
-            
-            clf_sgd = GridSearchCV(base_mdl_sgd, param_grid_sgd,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-            clf_sgd.fit(X_CV, Y_CV)
-            opt_params_sgd=clf_sgd.best_params_
-            score_sgd=clf_sgd.best_score_
-            t2=datetime.now()
-            dt=t2-t1
-            print('SGD CV finished after '+str(dt.total_seconds())+' sec')
-            print('SGD: The optimal C+/C- ratio is '+str(1/opt_params_sgd['class_weight'][0])+\
-                  ', loss function is '+opt_params_sgd['loss']+', and penalty '+\
-                      opt_params_sgd['penalty'])
-            
-            # optimise AdaBoost
-            print('Grid search hyperparameter optimisation started for AdaBoost')
-            t1=datetime.now()
-            
-            best_perf_ada=0
-            class_weight_rng=[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},\
-                              {0:5e-2,1:1},{0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]
-            for class_ratio in class_weight_rng:
+                clf_svm = GridSearchCV(base_mdl_svm, param_grid_svm,scoring='roc_auc',\
+                                   n_jobs=-1,cv=k_fold,refit=False)
+                clf_svm.fit(X_CV, Y_CV)
+                opt_params_svm=clf_svm.best_params_
+                C_opt=opt_params_svm['class_weight'][0]
+                kernel_opt=opt_params_svm['kernel']
+                score_svm=clf_svm.best_score_
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('SVM CV finished after '+str(dt.total_seconds())+' sec')
+                print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
+                
+                
+                
+                print('Computing CV ROC for LR ...')
+                t1=datetime.now()
+                score_lr=[]            
+                for m in range(0,k_fold):
+                    train_sample,test_sample=train_test_split(Y_CV,test_size=1/
+                                                              k_fold,shuffle=False,random_state=m)
+                    X_train=X_CV.iloc[train_sample.index]
+                    X_train=add_constant(X_train)
+                    Y_train=train_sample
+                    X_test=X_CV.iloc[test_sample.index]
+                    X_test=add_constant(X_test)
+                    Y_test=test_sample
+                    
+                    logit_model=Logit(Y_train,X_train)
+                    logit_model=logit_model.fit(disp=0)
+                    pred_LR_CV=logit_model.predict(X_test)
+                    score_lr.append(roc_auc_score(Y_test,pred_LR_CV))
+                
+                    
+                score_lr=np.mean(score_lr)
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('LR CV finished after '+str(dt.total_seconds())+' sec')
+                
+                # optimise SGD
+                print('Grid search hyperparameter optimisation started for SGD')
+                t1=datetime.now()
+                
+                param_grid_sgd={'penalty':['l1','l2'],'loss':['log','modified_huber'],\
+                                'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},\
+                                                {0:2e-2,1:1},{0:5e-2,1:1},{0:1e-1,1:1},\
+                                                    {0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                base_mdl_sgd=SGDClassifier(random_state=0,validation_fraction=.2,shuffle=False)
+                
+                clf_sgd = GridSearchCV(base_mdl_sgd, param_grid_sgd,scoring='roc_auc',\
+                                   n_jobs=-1,cv=k_fold,refit=False)
+                clf_sgd.fit(X_CV, Y_CV)
+                opt_params_sgd=clf_sgd.best_params_
+                score_sgd=clf_sgd.best_score_
+                t2=datetime.now()
+                dt=t2-t1
+                print('SGD CV finished after '+str(dt.total_seconds())+' sec')
+                print('SGD: The optimal C+/C- ratio is '+str(1/opt_params_sgd['class_weight'][0])+\
+                      ', loss function is '+opt_params_sgd['loss']+', and penalty '+\
+                          opt_params_sgd['penalty'])
+                
+                # optimise AdaBoost
+                print('Grid search hyperparameter optimisation started for AdaBoost')
+                t1=datetime.now()
+                
+                best_perf_ada=0
+                
                 param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
                                 'learning_rate':[.1,5e-1,9e-1,1]}
                     
-                base_lr=LogisticRegression(random_state=0,class_weight=class_ratio)
+                base_lr=LogisticRegression(random_state=0,solver='newton-cg')
                 base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
                 
                 clf_ada = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
@@ -457,61 +677,329 @@ class ML_Fraud:
                 if score_ada>=best_perf_ada:
                     best_perf_ada=score_ada
                     opt_params_ada=clf_ada.best_params_
-                    opt_class_weight_ada_lr=class_ratio
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('LogitBoost CV finished after '+str(dt.total_seconds())+' sec')
+                
+                print('LogitBoost: The optimal number of estimators is '+\
+                      str(opt_params_ada['n_estimators'])+', and learning rate '+\
+                          str(opt_params_ada['learning_rate']))
+                
+                # optimise MLP classifier
+                print('Grid search hyperparameter optimisation started for MLP')
+                t1=datetime.now()
+                param_grid_mlp={'hidden_layer_sizes':[1,2,5,10],'solver':['sgd','adam'],\
+                                'activation':['identity','logistic']}
+                base_mdl_mlp=MLPClassifier(random_state=0,validation_fraction=.2)
+                
+                clf_mlp = GridSearchCV(base_mdl_mlp, param_grid_mlp,scoring='roc_auc',\
+                                   n_jobs=-1,cv=k_fold,refit=False)
+                clf_mlp.fit(X_CV, Y_CV)
+                opt_params_mlp=clf_mlp.best_params_
+                score_mlp=clf_mlp.best_score_
+                t2=datetime.now()
+                dt=t2-t1
+                print('MLP CV finished after '+str(dt.total_seconds())+' sec')
+                print('MLP: The optimal number of hidden layer is '+\
+                      str(opt_params_mlp['hidden_layer_sizes'])+', activation function '+\
+                                  opt_params_mlp['activation']+', and solver '+\
+                                      opt_params_mlp['solver'])
+                
+                print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
+            else:
+                
+                n_opt_rus=1000
+                r_opt_rus=1e-4
+                score_rus=0.6953935928499526
+                
+                opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
+                C_opt=opt_params_svm['class_weight'][0]
+                kernel_opt=opt_params_svm['kernel']
+                score_svm=0.701939025416111
+                
+                score_lr=0.7056438104977343
+                
+                opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
+                score_sgd=0.7026775920776185
+    
+                opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
+                score_ada=0.700229450411913
+                
+                
+                opt_params_mlp={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
+                score_mlp=0.706333862286029
+                
+                
+                print('CV skipped ... using defaults for ratio case')
+                
+        elif cv_type=='temp':
+            if cross_val==True: 
+                # optimize RUSBoost grid
+                cutoff_temporal=2001-temp_year
+                X_CV_train=X_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
+                Y_CV_train=Y_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
+                
+                X_CV_test=X_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
+                Y_CV_test=Y_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
+                
+                
+                
+                print('Grid search hyperparameter optimisation started for RUSBoost')
+                t1=datetime.now()
+                param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000,2000],
+                                     'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1,1]}
+                
+                temp_rusboost={'n_estimators':[],'learning_rate':[],'score':[]}
+                
+                
+                for n in param_grid_rusboost['n_estimators']:
+                    for r in param_grid_rusboost['learning_rate']:
+                        temp_rusboost['n_estimators'].append(n)
+                        temp_rusboost['learning_rate'].append(r)
+                        base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+                        bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                                         sampling_strategy=1,n_estimators=n,
+                                         learning_rate=r,random_state=0).fit(
+                                             X_CV_train,Y_CV_train)
+                        predicted_test_RUS=bao_RUSboost.predict_proba(X_CV_test)[:,-1]
+                        
+                        temp_rusboost['score'].append(roc_auc_score(Y_CV_test,predicted_test_RUS))
+                        
+                
+                
+                idx_opt_rus=temp_rusboost['score'].index(np.max(temp_rusboost['score']))
+                n_opt_rus=temp_rusboost['n_estimators'][idx_opt_rus]
+                r_opt_rus=temp_rusboost['learning_rate'][idx_opt_rus]
+                score_rus=temp_rusboost['score'][idx_opt_rus]
+                    
+                t2=datetime.now()
+                dt=t2-t1
+                print('RUSBoost Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('RUSBoost: The optimal number of estimators is '+str(n_opt_rus))
+                
+                # optimize SVM grid
+                
+                print('Grid search hyperparameter optimisation started for SVM')
+                t1=datetime.now()
+                param_grid_svm={'kernel':['linear','rbf','poly'],'class_weight':[\
+                                                {0:2e-3,1:1},{0:5e-3,1:1},
+                                                {0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+                                                {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                
+                    
+                temp_svm={'kernel':[],'class_weight':[],'score':[]}
+                
+                
+                for k in param_grid_svm['kernel']:
+                    for w in param_grid_svm['class_weight']:
+                        temp_svm['kernel'].append(k)
+                        temp_svm['class_weight'].append(w)
+                        
+                        base_mdl_svm=SVC(shrinking=False,\
+                                            probability=False,
+                                            kernel=k,class_weight=w,\
+                                            random_state=0,max_iter=-1,\
+                                                tol=X_CV.shape[-1]*1e-3).fit(X_CV_train,Y_CV_train)
+                        predicted_test_svc=base_mdl_svm.decision_function(X_CV_test)
+                        
+                        predicted_test_svc=np.exp(predicted_test_svc)/(1+np.exp(predicted_test_svc))
+                        
+                        temp_svm['score'].append(roc_auc_score(Y_CV_test,predicted_test_svc))
+                
+                
+                idx_opt_svm=temp_svm['score'].index(np.max(temp_svm['score']))
+                
+                C_opt=temp_svm['class_weight'][idx_opt_svm][0]
+                kernel_opt=temp_svm['kernel'][idx_opt_svm]
+                score_svm=temp_svm['score'][idx_opt_svm]
+                opt_params_svm={'class_weight':temp_svm['class_weight'][idx_opt_svm],
+                                'kernel':kernel_opt}
+                print(opt_params_svm)
+                t2=datetime.now()
+                dt=t2-t1
+                print('SVM Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
+                
+                
+                print('Computing Temporal validation ROC for LR ...')
+                t1=datetime.now()
+                
+                
+                logit_model=Logit(Y_CV_train,X_CV_train).fit(disp=0)
+                pred_LR_CV=logit_model.predict(X_CV_test)
+                score_lr=(roc_auc_score(Y_CV_test,pred_LR_CV))
+                    
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('LR Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                
+                # optimise SGD
+                print('Grid search hyperparameter optimisation started for SGD')
+                t1=datetime.now()
+                
+                param_grid_sgd={'penalty':['l1','l2'],'loss':['log','modified_huber'],\
+                                'class_weight':[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},\
+                                                {0:2e-2,1:1},{0:5e-2,1:1},{0:1e-1,1:1},\
+                                                    {0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                
+                temp_sgd={'penalty':[],'loss':[],'class_weight':[],'score':[]}
+                
+                
+                for p in param_grid_sgd['penalty']:
+                    for l in param_grid_sgd['loss']:
+                        for w in param_grid_sgd['class_weight']:
+                            temp_sgd['penalty'].append(p)
+                            temp_sgd['loss'].append(l)
+                            temp_sgd['class_weight'].append(w)
+                        
+                            base_mdl_sgd=SGDClassifier(random_state=0,
+                                                       validation_fraction=.2,
+                                                       shuffle=False,
+                                                       penalty=p,
+                                                       loss=l,
+                                                       class_weight=w).fit(
+                                                           X_CV_train,Y_CV_train)
+                            predicted_test_sgd=base_mdl_sgd.predict_proba(X_CV_test)[:,-1]
+                            temp_sgd['score'].append(roc_auc_score(Y_CV_test,predicted_test_sgd))
+                        
+                
+                idx_opt_sgd=temp_sgd['score'].index(np.max(temp_sgd['score']))
+                
+                score_sgd=temp_sgd['score'][idx_opt_sgd]
+                opt_params_sgd={'class_weight':temp_sgd['class_weight'][idx_opt_sgd],
+                                'loss':temp_sgd['loss'][idx_opt_sgd],
+                                'penalty':temp_sgd['penalty'][idx_opt_sgd]}
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('SGD Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('SGD: The optimal C+/C- ratio is '+str(1/opt_params_sgd['class_weight'][0])+\
+                      ', loss function is '+opt_params_sgd['loss']+', and penalty '+\
+                          opt_params_sgd['penalty'])
+                
+                # optimise LogitBoost
+                print('Grid search hyperparameter optimisation started for LogitBoost')
+                t1=datetime.now()
+                
+                
+                param_grid_ada={'n_estimators':[10,20,50,100,200,500],\
+                                'learning_rate':[.1,5e-1,9e-1,1]}
+                
+                temp_ada={'n_estimators':[],'learning_rate':[],'score':[]}
+                
+                for n in param_grid_ada['n_estimators']:
+                    for r in param_grid_ada['learning_rate']:
+                            temp_ada['n_estimators'].append(n)
+                            temp_ada['learning_rate'].append(r)
+                            
+                            base_lr=LogisticRegression(random_state=0,solver='newton-cg')
+                            base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,
+                                                            learning_rate=r,
+                                                            n_estimators=n,
+                                                            random_state=0).fit(
+                                                                X_CV_train,
+                                                                Y_CV_train)
+                            predicted_ada_test=base_mdl_ada.predict_proba(X_CV_test)[:,-1]
+                            temp_ada['score'].append(roc_auc_score(Y_CV_test,predicted_ada_test))
+                            
+                            
+                    
+                idx_opt_ada=temp_ada['score'].index(np.max(temp_ada['score']))
+                
+                score_ada=temp_ada['score'][idx_opt_ada]
+                opt_params_ada={'n_estimators':temp_ada['n_estimators'][idx_opt_ada],
+                                'learning_rate':temp_ada['learning_rate'][idx_opt_ada]}
+                    
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('LogitBoost Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                
+                print('LogitBoost: The optimal number of estimators is '+\
+                      str(opt_params_ada['n_estimators'])+', and learning rate '+\
+                          str(opt_params_ada['learning_rate']))
+                
+                # optimise MLP classifier
+                print('Grid search hyperparameter optimisation started for MLP')
+                t1=datetime.now()
+                param_grid_mlp={'hidden_layer_sizes':[1,2,5,10],'solver':['sgd','adam'],\
+                                'activation':['identity','logistic']}
+                    
+                temp_mlp={'hidden_layer_sizes':[],'solver':[],'activation':[],'score':[]}
+                
+                for h in param_grid_mlp['hidden_layer_sizes']:
+                    for s in param_grid_mlp['solver']:
+                        for a in param_grid_mlp['activation']:
+                            temp_mlp['hidden_layer_sizes'].append(h)
+                            temp_mlp['solver'].append(s)
+                            temp_mlp['activation'].append(a)
+                        
+                            base_mdl_mlp=MLPClassifier(random_state=0,
+                                                       validation_fraction=.2,
+                                                       hidden_layer_sizes=h,
+                                                       solver=s,
+                                                       activation=a).fit(X_CV_train,
+                                                                         Y_CV_train)
+                            predicted_mlp_test=base_mdl_mlp.predict_proba(X_CV_test)[:,-1]
+                            temp_mlp['score'].append(roc_auc_score(Y_CV_test,predicted_mlp_test))
+                
+                
+                idx_opt=temp_mlp['score'].index(np.max(temp_mlp['score']))
+                
+                score_mlp=temp_mlp['score'][idx_opt]
+                opt_params_mlp={'hidden_layer_sizes':temp_mlp['hidden_layer_sizes'][idx_opt],
+                                'solver':temp_mlp['solver'][idx_opt],
+                                'activation':temp_mlp['activation'][idx_opt]}
+                
+                
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('MLP Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('MLP: The optimal number of hidden layer is '+\
+                      str(opt_params_mlp['hidden_layer_sizes'])+', activation function '+\
+                                  opt_params_mlp['activation']+', and solver '+\
+                                      opt_params_mlp['solver'])
+                
+                print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
+            else:
+                n_opt_rus=500
+                r_opt_rus=1e-1
+                score_rus=0.7002526951115313
+                
+                # n_opt_rus=500
+                # r_opt_rus=1
+                # score_rus=0.6615684777537431
+                
+                opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
+                C_opt=opt_params_svm['class_weight'][0]
+                kernel_opt=opt_params_svm['kernel']
+                score_svm=0.6701583434835566
+                
+                
+                score_lr=0.5022597124002399
+                # score_lr=0.47810153963608604
+                
+                opt_params_sgd={'class_weight': {0: 0.5, 1: 1}, 'loss': 'log', 'penalty': 'l1'}
+                score_sgd=0.6803715890704819
+                # opt_params_sgd={'class_weight': {0: 0.5, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
+                # score_sgd=0.6872969419349366
+    
+                opt_params_ada={'n_estimators': 200, 'learning_rate': 0.9}
+                score_ada=0.6641663788245132
+                
+                
+                opt_params_mlp={'hidden_layer_sizes': 2, 'solver': 'adam', 'activation': 'identity'}
+                score_mlp=0.6660970421946298
+                
+                # opt_params_mlp={'hidden_layer_sizes': 5, 'solver': 'adam', 'activation': 'logistic'}
+                # score_mlp=0.671069262416762
+                
+                print('Temporal validation skipped ... using defaults for ratio case')
                 
             
-            t2=datetime.now()
-            dt=t2-t1
-            print('ADA CV finished after '+str(dt.total_seconds())+' sec')
-            
-            print('ADA: The optimal number of estimators is '+\
-                  str(opt_params_ada['n_estimators'])+', and learning rate '+\
-                      str(opt_params_ada['learning_rate']))
-            imbalance_fact=opt_class_weight_ada_lr[1]/opt_class_weight_ada_lr[0]
-            print('ADA: The optimal C+/C- is '+str(imbalance_fact))
-            
-            # optimise MLP classifier
-            print('Grid search hyperparameter optimisation started for MLP')
-            t1=datetime.now()
-            param_grid={'hidden_layer_sizes':[1,2,5,10],'solver':['sgd','adam'],\
-                            'activation':['identity','logistic']}
-            base_mdl_mlp=MLPClassifier(random_state=0,validation_fraction=.2)
-            
-            clf_mlp = GridSearchCV(base_mdl_mlp, param_grid,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-            clf_mlp.fit(X_CV, Y_CV)
-            opt_params=clf_mlp.best_params_
-            score_mlp=clf_mlp.best_score_
-            t2=datetime.now()
-            dt=t2-t1
-            print('MLP CV finished after '+str(dt.total_seconds())+' sec')
-            print('MLP: The optimal number of hidden layer is '+\
-                  str(opt_params['hidden_layer_sizes'])+', activation function '+\
-                              opt_params['activation']+', and solver '+\
-                                  opt_params['solver'])
-            
-            print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
-        else:
-            n_opt=100
-            r_opt=1e-3
-            score_rus=0.695492921141167
-            
-            opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
-            C_opt=opt_params_svm['class_weight'][0]
-            kernel_opt=opt_params_svm['kernel']
-            score_svm=0.701939025416111
-            
-            score_lr=0.7056438104977343
-            
-            opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
-            score_sgd=0.7026775920776185
-
-            opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
-            opt_class_weight_ada_lr={0:1e0,1:1}
-            score_ada=0.700229450411913
-            
-            opt_params={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
-            score_mlp=0.706333862286029
 
         range_oos=range(start_OOS_year,end_OOS_year+1,OOS_period)
 
@@ -580,6 +1068,10 @@ class ML_Fraud:
             tbl_year_IS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear<yr-OOS_gap,\
                                                        reduced_tbl.fyear>=year_start_IS)]
             tbl_year_IS=tbl_year_IS.reset_index(drop=True)
+            
+            
+            
+            
             misstate_firms=np.unique(tbl_year_IS.gvkey[tbl_year_IS.AAER_DUMMY==1])
             tbl_year_OOS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear>=yr,\
                                                         reduced_tbl.fyear<yr+OOS_period)]
@@ -616,8 +1108,8 @@ class ML_Fraud:
             # RUSBoost with 11 ratios
             
             base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
-                             learning_rate=r_opt,sampling_strategy=1,random_state=0)
+            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt_rus,\
+                             learning_rate=r_opt_rus,sampling_strategy=1,random_state=0)
             clf_rusboost=bao_RUSboost.fit(X, Y)
             probs_oos_fraud_rus=clf_rusboost.predict_proba(X_OOS)[:,-1]
             roc_rus[m]=roc_auc_score(Y_OOS,probs_oos_fraud_rus)
@@ -727,7 +1219,7 @@ class ML_Fraud:
             
             
             # LogitBoost
-            base_lr=LogisticRegression(random_state=0)
+            base_lr=LogisticRegression(random_state=0,solver='newton-cg')
             
             
             clf_ada=AdaBoostClassifier(n_estimators=opt_params_ada['n_estimators'],\
@@ -758,8 +1250,8 @@ class ML_Fraud:
                 
             
             # Multi Layer Perceptron
-            clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params['hidden_layer_sizes'], \
-                                  activation=opt_params['activation'],solver=opt_params['solver'],\
+            clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params_mlp['hidden_layer_sizes'], \
+                                  activation=opt_params_mlp['activation'],solver=opt_params_mlp['solver'],\
                                                random_state=0,validation_fraction=.1)
             clf_mlp=clf_mlp.fit(X,Y)
             probs_oos_fraud_mlp=clf_mlp.predict_proba(X_OOS)[:,-1]
@@ -843,57 +1335,187 @@ class ML_Fraud:
                                       '% for MLP vs '+ str(round(np.mean(sensitivity_OOS_fused1)*100,2))+\
                                           '% for FUSED')
 
-
+        f1_score_rus1=2*(precision_rus1*sensitivity_OOS_rus1)/\
+            (precision_rus1+sensitivity_OOS_rus1+1e-8)
+        
+        f1_score_svm1=2*(precision_svm1*sensitivity_OOS_svm1)/\
+            (precision_svm1+sensitivity_OOS_svm1+1e-8)
+        
+        f1_score_lr1=2*(precision_lr1*sensitivity_OOS_lr1)/\
+            (precision_lr1+sensitivity_OOS_lr1+1e-8)
+        
+        f1_score_sgd1=2*(precision_sgd1*sensitivity_OOS_sgd1)/\
+            (precision_sgd1+sensitivity_OOS_sgd1+1e-8)
+        
+        f1_score_ada1=2*(precision_ada1*sensitivity_OOS_ada1)/\
+            (precision_ada1+sensitivity_OOS_ada1+1e-8)
+        
+        f1_score_mlp1=2*(precision_mlp1*sensitivity_OOS_mlp1)/\
+            (precision_mlp1+sensitivity_OOS_mlp1+1e-8)
+        
+        f1_score_fused1=2*(precision_fused1*sensitivity_OOS_fused1)/\
+            (precision_fused1+sensitivity_OOS_fused1+1e-8)
+        
         # create performance table now
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['RUSBoost','SVM','LR','SGD','LogitBoost','MLP','FUSED']
-        perf_tbl_general['Roc']=[np.mean(roc_rus),np.mean(roc_svm),np.mean(roc_lr),\
-                                 np.mean(roc_sgd),np.mean(roc_ada),\
-                                     np.mean(roc_mlp),np.mean(roc_fused)]
+        perf_tbl_general['Roc']=[str(np.round(
+            np.mean(roc_rus)*100,2))+'% ('+\
+            str(np.round(np.std(roc_rus)*100,2))+'%)',str(np.round(
+                np.mean(roc_svm)*100,2))+'% ('+\
+                str(np.round(np.std(roc_svm)*100,2))+'%)',str(np.round(
+                    np.mean(roc_lr)*100,2))+'% ('+\
+                    str(np.round(np.std(roc_lr)*100,2))+'%)',str(np.round(
+                        np.mean(roc_sgd)*100,2))+'% ('+\
+                        str(np.round(np.std(roc_sgd)*100,2))+'%)',str(np.round(
+                            np.mean(roc_ada)*100,2))+'% ('+\
+                            str(np.round(np.std(roc_ada)*100,2))+'%)',str(np.round(
+                                np.mean(roc_mlp)*100,2))+'% ('+\
+                                str(np.round(np.std(roc_mlp)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(roc_fused)*100,2))+'% ('+\
+                                    str(np.round(np.std(roc_fused)*100,2))+'%)']
+        
+        
 
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_rus1),\
-                                                 np.mean(sensitivity_OOS_svm1),\
-                                         np.mean(sensitivity_OOS_lr1),\
-                                             np.mean(sensitivity_OOS_sgd1),np.mean(sensitivity_OOS_ada1),\
-                                                 np.mean(sensitivity_OOS_mlp1),np.mean(sensitivity_OOS_fused1)]
+        perf_tbl_general['Sensitivity @ 1 Prc']=[str(np.round(
+            np.mean(sensitivity_OOS_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_rus1)*100,2))+'%)',str(np.round(
+                np.mean(sensitivity_OOS_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(sensitivity_OOS_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(sensitivity_OOS_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(sensitivity_OOS_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(sensitivity_OOS_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(sensitivity_OOS_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(sensitivity_OOS_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(sensitivity_OOS_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(sensitivity_OOS_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(sensitivity_OOS_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(sensitivity_OOS_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(sensitivity_OOS_fused1)*100,2))+'%)']
+        
+        
 
-        perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_rus1),\
-                                                 np.mean(specificity_OOS_svm1),\
-                                         np.mean(specificity_OOS_lr1),\
-                                             np.mean(specificity_OOS_sgd1),np.mean(specificity_OOS_ada1),\
-                                                 np.mean(specificity_OOS_mlp1),np.mean(specificity_OOS_fused1)]
+        perf_tbl_general['Specificity @ 1 Prc']=[str(np.round(
+            np.mean(specificity_OOS_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_rus1)*100,2))+'%)',str(np.round(
+                np.mean(specificity_OOS_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(specificity_OOS_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(specificity_OOS_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(specificity_OOS_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(specificity_OOS_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(specificity_OOS_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(specificity_OOS_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(specificity_OOS_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(specificity_OOS_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(specificity_OOS_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(specificity_OOS_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(specificity_OOS_fused1)*100,2))+'%)']
+        
+        
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_rus1),\
-                                               np.mean(precision_svm1),\
-                                         np.mean(precision_lr1),\
-                                             np.mean(precision_sgd1),np.mean(precision_ada1),\
-                                                 np.mean(precision_mlp1),np.mean(precision_fused1)]
+        perf_tbl_general['Precision @ 1 Prc']=[str(np.round(
+            np.mean(precision_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(precision_rus1)*100,2))+'%)',str(np.round(
+                np.mean(precision_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(precision_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(precision_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(precision_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(precision_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(precision_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(precision_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(precision_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(precision_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(precision_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(precision_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(precision_fused1)*100,2))+'%)']
 
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
-        perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_rus1),np.mean(ndcg_svm1),\
-                                         np.mean(ndcg_lr1),\
-                                             np.mean(ndcg_sgd1),np.mean(ndcg_ada1),\
-                                                 np.mean(ndcg_mlp1),np.mean(ndcg_fused1)]
+        perf_tbl_general['F1 Score @ 1 Prc']=[str(np.round(
+            np.mean(f1_score_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_rus1)*100,2))+'%)',str(np.round(
+                np.mean(f1_score_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(f1_score_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(f1_score_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(f1_score_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(f1_score_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(f1_score_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(f1_score_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(f1_score_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(f1_score_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(f1_score_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(f1_score_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(f1_score_fused1)*100,2))+'%)']
+            
+        
+        perf_tbl_general['NDCG @ 1 Prc']=[str(np.round(
+            np.mean(ndcg_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_rus1)*100,2))+'%)',str(np.round(
+                np.mean(ndcg_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(ndcg_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(ndcg_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(ndcg_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(ndcg_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(ndcg_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(ndcg_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(ndcg_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(ndcg_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(ndcg_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(ndcg_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(ndcg_fused1)*100,2))+'%)']
+        
+        
+        
+        
+        
+        perf_tbl_general['ECM @ 1 Prc']=[str(np.round(
+            np.mean(ecm_rus1)*100,2))+'% ('+\
+            str(np.round(np.std(ecm_rus1)*100,2))+'%)',str(np.round(
+                np.mean(ecm_svm1)*100,2))+'% ('+\
+                str(np.round(np.std(ecm_svm1)*100,2))+'%)',str(np.round(
+                    np.mean(ecm_lr1)*100,2))+'% ('+\
+                    str(np.round(np.std(ecm_lr1)*100,2))+'%)',str(np.round(
+                        np.mean(ecm_sgd1)*100,2))+'% ('+\
+                        str(np.round(np.std(ecm_sgd1)*100,2))+'%)',str(np.round(
+                            np.mean(ecm_ada1)*100,2))+'% ('+\
+                            str(np.round(np.std(ecm_ada1)*100,2))+'%)',str(np.round(
+                                np.mean(ecm_mlp1)*100,2))+'% ('+\
+                                str(np.round(np.std(ecm_mlp1)*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(ecm_fused1)*100,2))+'% ('+\
+                                    str(np.round(np.std(ecm_fused1)*100,2))+'%)']
+    
+            
+        
 
-        perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_rus1),np.mean(ecm_svm1),\
-                                         np.mean(ecm_lr1),\
-                                             np.mean(ecm_sgd1),np.mean(ecm_ada1),\
-                                                 np.mean(ecm_mlp1),np.mean(ecm_fused1)]
-
-        if case_window=='expanding':
-            lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
-                '_'+case_window+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_11ratios.csv'
+        if cv_type=='kfold':
+            if case_window=='expanding':
+                lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+','+\
+                    str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+            else:
+                lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
+                    str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
         else:
-            lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
-                '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_11ratios.csv'
+            if case_window=='expanding':
+                lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+','+\
+                    'temporal'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+            else:
+                lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
+                    'temporal'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
 
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
@@ -907,62 +1529,161 @@ class ML_Fraud:
 
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['RUSBoost','SVM','LR','SGD','LogitBoost','MLP','FUSED']
-        perf_tbl_general['Roc']=[np.mean(roc_rus[2:8]),np.mean(roc_svm[2:8]),np.mean(roc_lr[2:8]),\
-                                 np.mean(roc_sgd[2:8]),\
-                                     np.mean(roc_ada[2:8]),np.mean(roc_mlp[2:8]),np.mean(roc_fused[2:8])]
+        
+        
+        perf_tbl_general['Roc']=[str(np.round(
+            np.mean(roc_rus[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(roc_rus[2:8])*100,2))+'%)',str(np.round(
+                np.mean(roc_svm[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(roc_svm[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(roc_lr[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(roc_lr[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(roc_sgd[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(roc_sgd[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(roc_ada[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(roc_ada[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(roc_mlp[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(roc_mlp[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(roc_fused[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(roc_fused[2:8])*100,2))+'%)']
+        
+        
 
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=[np.mean(sensitivity_OOS_rus1[2:8]),\
-                                                 np.mean(sensitivity_OOS_svm1[2:8]),\
-                                         np.mean(sensitivity_OOS_lr1[2:8]),\
-                                             np.mean(sensitivity_OOS_sgd1[2:8]),\
-                                                 np.mean(sensitivity_OOS_ada1[2:8]),\
-                                                 np.mean(sensitivity_OOS_mlp1[2:8]),\
-                                                     np.mean(sensitivity_OOS_fused1[2:8])]
+        perf_tbl_general['Sensitivity @ 1 Prc']=[str(np.round(
+            np.mean(sensitivity_OOS_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(sensitivity_OOS_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(sensitivity_OOS_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(sensitivity_OOS_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(sensitivity_OOS_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(sensitivity_OOS_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(sensitivity_OOS_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(sensitivity_OOS_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(sensitivity_OOS_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(sensitivity_OOS_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(sensitivity_OOS_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(sensitivity_OOS_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(sensitivity_OOS_fused1[2:8])*100,2))+'%)']
+        
+        
 
-        perf_tbl_general['Specificity @ 1 Prc']=[np.mean(specificity_OOS_rus1[2:8]),\
-                                                 np.mean(specificity_OOS_svm1[2:8]),\
-                                         np.mean(specificity_OOS_lr1[2:8]),\
-                                             np.mean(specificity_OOS_sgd1[2:8]),\
-                                                 np.mean(specificity_OOS_ada1[2:8]),\
-                                                 np.mean(specificity_OOS_mlp1[2:8]),\
-                                                     np.mean(specificity_OOS_fused1[2:8])]
+        perf_tbl_general['Specificity @ 1 Prc']=[str(np.round(
+            np.mean(specificity_OOS_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(specificity_OOS_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(specificity_OOS_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(specificity_OOS_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(specificity_OOS_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(specificity_OOS_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(specificity_OOS_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(specificity_OOS_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(specificity_OOS_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(specificity_OOS_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(specificity_OOS_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(specificity_OOS_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(specificity_OOS_fused1[2:8])*100,2))+'%)']
+        
+        
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=[np.mean(precision_rus1[2:8]),\
-                                               np.mean(precision_svm1[2:8]),\
-                                         np.mean(precision_lr1[2:8]),\
-                                             np.mean(precision_sgd1[2:8]),\
-                                                 np.mean(precision_ada1[2:8]),\
-                                                 np.mean(precision_mlp1[2:8]),\
-                                                     np.mean(precision_fused1[2:8])]
+        perf_tbl_general['Precision @ 1 Prc']=[str(np.round(
+            np.mean(precision_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(precision_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(precision_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(precision_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(precision_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(precision_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(precision_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(precision_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(precision_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(precision_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(precision_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(precision_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(precision_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(precision_fused1[2:8])*100,2))+'%)']
 
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
+        perf_tbl_general['F1 Score @ 1 Prc']=[str(np.round(
+            np.mean(f1_score_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(f1_score_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(f1_score_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(f1_score_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(f1_score_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(f1_score_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(f1_score_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(f1_score_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(f1_score_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(f1_score_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(f1_score_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(f1_score_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(f1_score_fused1[2:8])*100,2))+'%)']
+            
+        
+        perf_tbl_general['NDCG @ 1 Prc']=[str(np.round(
+            np.mean(ndcg_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(ndcg_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(ndcg_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(ndcg_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(ndcg_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(ndcg_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(ndcg_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(ndcg_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(ndcg_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(ndcg_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(ndcg_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(ndcg_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(ndcg_fused1[2:8])*100,2))+'%)']
+        
+        
+        
+        
+        
+        perf_tbl_general['ECM @ 1 Prc']=[str(np.round(
+            np.mean(ecm_rus1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(ecm_rus1[2:8])*100,2))+'%)',str(np.round(
+                np.mean(ecm_svm1[2:8])*100,2))+'% ('+\
+                str(np.round(np.std(ecm_svm1[2:8])*100,2))+'%)',str(np.round(
+                    np.mean(ecm_lr1[2:8])*100,2))+'% ('+\
+                    str(np.round(np.std(ecm_lr1[2:8])*100,2))+'%)',str(np.round(
+                        np.mean(ecm_sgd1[2:8])*100,2))+'% ('+\
+                        str(np.round(np.std(ecm_sgd1[2:8])*100,2))+'%)',str(np.round(
+                            np.mean(ecm_ada1[2:8])*100,2))+'% ('+\
+                            str(np.round(np.std(ecm_ada1[2:8])*100,2))+'%)',str(np.round(
+                                np.mean(ecm_mlp1[2:8])*100,2))+'% ('+\
+                                str(np.round(np.std(ecm_mlp1[2:8])*100,2))+'%)',
+                                str(np.round(
+                                    np.mean(ecm_fused1[2:8])*100,2))+'% ('+\
+                                    str(np.round(np.std(ecm_fused1[2:8])*100,2))+'%)']
 
-
-        perf_tbl_general['NDCG @ 1 Prc']=[np.mean(ndcg_rus1[2:8]),\
-                                          np.mean(ndcg_svm1[2:8]),\
-                                         np.mean(ndcg_lr1[2:8]),\
-                                             np.mean(ndcg_sgd1[2:8]),np.mean(ndcg_ada1[2:8]),\
-                                                 np.mean(ndcg_mlp1[2:8]),\
-                                                     np.mean(ndcg_fused1[2:8])]
-        perf_tbl_general['ECM @ 1 Prc']=[np.mean(ecm_rus1[2:8]),\
-                                         np.mean(ecm_svm1[2:8]),\
-                                         np.mean(ecm_lr1[2:8]),\
-                                             np.mean(ecm_sgd1[2:8]),np.mean(ecm_ada1[2:8]),\
-                                                 np.mean(ecm_mlp1[2:8]),np.mean(ecm_fused1[2:8])]
-
-        if case_window=='expanding':
-            lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
-                '_'+case_window+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_11ratios.csv'
+        if cv_type=='kfold':
+            if case_window=='expanding':
+                lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+','+\
+                    str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+            else:
+                lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
+                    str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
         else:
-            lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
-                '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
+            if case_window=='expanding':
+                lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+','+\
+                    'temporal'+',serial='+str(adjust_serial)+\
+                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+            else:
+                lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
+                    'temporal'+',serial='+str(adjust_serial)+\
                     ',gap='+str(OOS_gap)+'_11ratios.csv'
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
@@ -1015,9 +1736,11 @@ class ML_Fraud:
         end_OOS_year=self.ts[-1]
         sample_start=self.ss
         adjust_serial=self.a_s
+        cv_type=self.cv_t
         cross_val=self.cv
+        temp_year=self.cv_t_y
         case_window=self.sa
-        fraud_df=self.df
+        fraud_df=self.df.copy(deep=True)
         write=self.w
 
         reduced_tbl_1=fraud_df.iloc[:,[0,1,3,7,8]]
@@ -1033,48 +1756,90 @@ class ML_Fraud:
         tbl_year_IS_CV=tbl_year_IS_CV.reset_index(drop=True)
         misstate_firms=np.unique(tbl_year_IS_CV.gvkey[tbl_year_IS_CV.AAER_DUMMY==1])
 
-        X_CV=tbl_year_IS_CV.iloc[:,9:-14]
-
-        mean_vals=np.mean(X_CV)
-        std_vals=np.std(X_CV)
-        X_CV=(X_CV-mean_vals)/std_vals
+        X_CV=tbl_year_IS_CV.iloc[:,-28:]
 
         Y_CV=tbl_year_IS_CV.AAER_DUMMY
 
         P_f=np.sum(Y_CV==1)/len(Y_CV)
         P_nf=1-P_f
-
+        
         # optimize RUSBoost number of estimators
-        if cross_val==True:
+        if cv_type=='kfold':
+            if cross_val==True:
             
-            print('Grid search hyperparameter optimisation started for RUSBoost')
-            t1=datetime.now()
-            param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
-                                 'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1]}
-            base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
-                             sampling_strategy=1,random_state=0)
-            clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-            clf_rus.fit(X_CV, Y_CV)
-            opt_params_rus=clf_rus.best_params_
-            n_opt=opt_params_rus['n_estimators']
-            r_opt=opt_params_rus['learning_rate']
-            score_rus=clf_rus.best_score_        
-            t2=datetime.now()
-            dt=t2-t1
-            print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
-            print('RUSBoost: The optimal number of estimators is '+str(n_opt))
-        else:
-            n_opt=1000
-            r_opt=1e-4
-            score_rus28=0.6505273864153011
-            #n_opt=3000
-            print('Cross-validation skipped ... number of estimators='+str(n_opt))
-
-
+                print('Grid search hyperparameter optimisation started for RUSBoost')
+                t1=datetime.now()
+                param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
+                                     'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1,1]}
+                #base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+                base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+                bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                                 sampling_strategy=1,random_state=0)
+                clf_rus = GridSearchCV(bao_RUSboost, param_grid_rusboost,scoring='roc_auc',\
+                                   n_jobs=-1,cv=k_fold,refit=False)
+                clf_rus.fit(X_CV, Y_CV)
+                opt_params_rus=clf_rus.best_params_
+                n_opt_rus=opt_params_rus['n_estimators']
+                r_opt_rus=opt_params_rus['learning_rate']
+                score_rus=clf_rus.best_score_        
+                t2=datetime.now()
+                dt=t2-t1
+                print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
+                print('RUSBoost: The optimal number of estimators is '+str(n_opt_rus))
+            else:
+                n_opt_rus=200
+                r_opt_rus=1e-5
+                
+                
+                print('Cross-validation skipped ... number of estimators='+str(n_opt_rus))
+        elif cv_type=='temp':
+            if cross_val==True:
+                cutoff_temporal=2001-temp_year
+                X_CV_train=X_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
+                Y_CV_train=Y_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
+                X_CV_test=X_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
+                Y_CV_test=Y_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
+                
+                
+                print('Grid search hyperparameter optimisation started for RUSBoost')
+                t1=datetime.now()
+                param_grid_rusboost={'n_estimators':[10,20,50,100,200,500,1000],
+                                     'learning_rate':[1e-5,1e-4,1e-3,1e-2,.1,1]}
+                
+                temp_rusboost={'n_estimators':[],'learning_rate':[],'score':[]}
+                
+                
+                for n in param_grid_rusboost['n_estimators']:
+                    for r in param_grid_rusboost['learning_rate']:
+                        temp_rusboost['n_estimators'].append(n)
+                        temp_rusboost['learning_rate'].append(r)
+                        base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+                        bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,\
+                                         sampling_strategy=1,n_estimators=n,
+                                         learning_rate=r,random_state=0).fit(
+                                             X_CV_train,Y_CV_train)
+                        predicted_test_RUS=bao_RUSboost.predict_proba(X_CV_test)[:,-1]
+                        
+                        temp_rusboost['score'].append(roc_auc_score(Y_CV_test,predicted_test_RUS))
+                
+                idx_opt_rus=temp_rusboost['score'].index(np.max(temp_rusboost['score']))
+                n_opt_rus=temp_rusboost['n_estimators'][idx_opt_rus]
+                r_opt_rus=temp_rusboost['learning_rate'][idx_opt_rus]
+                score_rus=temp_rusboost['score'][idx_opt_rus]
+                    
+                t2=datetime.now()
+                dt=t2-t1
+                print('RUSBoost Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('RUSBoost: The optimal number of estimators is '+str(n_opt_rus))
+                
+            else:
+                n_opt_rus=1000
+                r_opt_rus=1e-2
+                #n_opt=3000
+                print('Temporal-validation skipped ... number of estimators='+str(n_opt_rus))
+                        
+                
         # Setting as proposed in Bao et al (2020)
-
 
         roc_rusboost=np.zeros(len(range_oos))
         specificity_rusboost=np.zeros(len(range_oos))
@@ -1112,21 +1877,18 @@ class ML_Fraud:
             tbl_year_OOS=tbl_year_OOS.reset_index(drop=True)
             
             X=tbl_year_IS.iloc[:,-28:]
-            mean_vals=np.mean(X)
-            std_vals=np.std(X)
-            X=(X-mean_vals)/std_vals
+
             Y=tbl_year_IS.AAER_DUMMY
             
             X_OOS=tbl_year_OOS.iloc[:,-28:]
-            X_OOS=(X_OOS-mean_vals)/std_vals
             
             Y_OOS=tbl_year_OOS.AAER_DUMMY
             
             n_P=np.sum(Y_OOS==1)
             n_N=np.sum(Y_OOS==0)
             base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
-                             learning_rate=r_opt,sampling_strategy=1,random_state=0)
+            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt_rus,\
+                             learning_rate=r_opt_rus,sampling_strategy=1,random_state=0)
             clf_rusboost = bao_RUSboost.fit(X,Y)
             
             probs_oos_fraud_rusboost=clf_rusboost.predict_proba(X_OOS)[:,-1]
@@ -1172,28 +1934,46 @@ class ML_Fraud:
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['RUSBoost-28']
 
-        perf_tbl_general['Roc']=np.mean(roc_rusboost)
+        perf_tbl_general['Roc']=str(np.round(
+            np.mean(roc_rusboost)*100,2))+'% ('+\
+            str(np.round(np.std(roc_rusboost)*100,2))+'%)'
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=np.mean(sensitivity_OOS_rusboost1)
+        perf_tbl_general['Sensitivity @ 1 Prc']=str(np.round(
+            np.mean(sensitivity_OOS_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_rusboost1)*100,2))+'%)'
 
-        perf_tbl_general['Specificity @ 1 Prc']=np.mean(specificity_OOS_rusboost1)
+        perf_tbl_general['Specificity @ 1 Prc']=str(np.round(
+            np.mean(specificity_OOS_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_rusboost1)*100,2))+'%)'
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=np.mean(precision_rusboost1)
-
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
+        perf_tbl_general['Precision @ 1 Prc']=str(np.round(
+            np.mean(precision_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(precision_rusboost1)*100,2))+'%)'
+        
+        f1_score_rusboost1=2*(precision_rusboost1*sensitivity_OOS_rusboost1)/\
+            (precision_rusboost1+sensitivity_OOS_rusboost1+1e-8)
+        perf_tbl_general['F1 Score @ 1 Prc']=str(np.round(
+            np.mean(f1_score_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_rusboost1)*100,2))+'%)'
                                                     
-        perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_rusboost1)
+        perf_tbl_general['NDCG @ 1 Prc']=str(np.round(
+            np.mean(ndcg_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_rusboost1)*100,2))+'%)'
 
-        perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_rusboost1)
-
+        perf_tbl_general['ECM @ 1 Prc']=str(np.round(
+            np.mean(ecm_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(ecm_rusboost1)*100,2))+'%)'
+        
                    
-
-        lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
-                '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_RUSBoost.csv'
+        if cv_type=='kfold':
+            lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_kfold_RUSBoost.csv'
+        else:
+            lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_temporal_RUSBoost.csv'
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
         print(perf_tbl_general)
@@ -1206,35 +1986,52 @@ class ML_Fraud:
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['RUSBoost-28']
 
-        perf_tbl_general['Roc']=np.mean(roc_rusboost[2:8])
+        perf_tbl_general['Roc']=str(np.round(
+            np.mean(roc_rusboost[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(roc_rusboost[2:8])*100,2))+'%)'
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=np.mean(sensitivity_OOS_rusboost1[2:8])
+        perf_tbl_general['Sensitivity @ 1 Prc']=str(np.round(
+            np.mean(sensitivity_OOS_rusboost1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_rusboost1[2:8])*100,2))+'%)'
 
-        perf_tbl_general['Specificity @ 1 Prc']=np.mean(specificity_OOS_rusboost1[2:8])
+        perf_tbl_general['Specificity @ 1 Prc']=str(np.round(
+            np.mean(specificity_OOS_rusboost1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_rusboost1[2:8])*100,2))+'%)'
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=np.mean(precision_rusboost1[2:8])
-
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
+        perf_tbl_general['Precision @ 1 Prc']=str(np.round(
+            np.mean(precision_rusboost1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(precision_rusboost1[2:8])*100,2))+'%)'
+        
+        perf_tbl_general['F1 Score @ 1 Prc']=str(np.round(
+            np.mean(f1_score_rusboost1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_rusboost1[2:8])*100,2))+'%)'
                                                     
-        perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_rusboost1[2:8])
+        perf_tbl_general['NDCG @ 1 Prc']=str(np.round(
+            np.mean(ndcg_rusboost1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_rusboost1[2:8])*100,2))+'%)'
+        
 
-        perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_rusboost1[2:8])
-
-
+        perf_tbl_general['ECM @ 1 Prc']=str(np.round(
+            np.mean(ecm_rusboost1)*100,2))+'% ('+\
+            str(np.round(np.std(ecm_rusboost1)*100,2))+'%)'
 
                                                    
-
-        lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
-                '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_RUSBoost.csv'
+        if cv_type=='kfold':
+            lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_kfold_RUSBoost.csv'
+        else:
+            lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_temporal_RUSBoost.csv'
+                        
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
         
         ## End of analysis of 28 raw variables procedure 
         
+
     def analyse_fk(self,C_FN=30,C_FP=1,record_matrix=True):
         """
         This code replicates the SVM with Financial Kernel as in Cecchini et al (2010)
@@ -1287,8 +2084,10 @@ class ML_Fraud:
         sample_start=self.ss
         adjust_serial=self.a_s
         cross_val=self.cv
+        cv_type=self.cv_t
+        temp_year=self.cv_t_y
         case_window=self.sa
-        fraud_df=self.df
+        fraud_df=self.df.copy(deep=True)
         write=self.w
         # First discard five variables that are in Bao et al (2020)
         # but not in Cecchini et al (2010)
@@ -1398,33 +2197,85 @@ class ML_Fraud:
         P_f=np.sum(Y_CV==1)/len(Y_CV)
         P_nf=1-P_f
         # optimize SVM grid
-        if cross_val==True:
-
-            print('Grid search hyperparameter optimisation started for SVM')
-            t1=datetime.now()
-            param_grid_svm={'class_weight':[{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
-                                            {0:1e-1,1:1}]}
-            base_mdl_svm=SVC(kernel='linear',shrinking=False,\
-                                probability=False,random_state=0,cache_size=1000,\
-                                    tol=X_CV.shape[-1]*1e-3)
-            
-            clf_svm_fk = GridSearchCV(base_mdl_svm, param_grid_svm,scoring='roc_auc',\
-                                n_jobs=-1,cv=k_fold,refit=False)
-            clf_svm_fk.fit(X_CV, Y_CV)
-            opt_params_svm_fk=clf_svm_fk.best_params_
-            C_opt=opt_params_svm_fk['class_weight'][0]
-            score_svm=clf_svm_fk.best_score_
-            
-            t2=datetime.now()
-            dt=t2-t1
-            print('SVM CV finished after '+str(dt.total_seconds())+' sec')
-            print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
-        else:
-            opt_params_svm_fk={'class_weight':{0: 0.02, 1: 1}}
-            score_svm=0.595534973722555
-            print('Cross-validation skipped ... Using C+/C-='+\
-                  str(1/(opt_params_svm_fk['class_weight'][0])))
-
+        if cv_type=='kfold':
+            if cross_val==True:
+    
+                print('Grid search hyperparameter optimisation started for SVM-FK')
+                t1=datetime.now()
+                param_grid_svm={'class_weight':[{0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+                                                {0:1e-1,1:1}]}
+                base_mdl_svm=SVC(kernel='linear',shrinking=False,\
+                                    probability=False,random_state=0,cache_size=1000,\
+                                        tol=X_CV.shape[-1]*1e-3)
+                
+                clf_svm_fk = GridSearchCV(base_mdl_svm, param_grid_svm,scoring='roc_auc',\
+                                    n_jobs=-1,cv=k_fold,refit=False)
+                clf_svm_fk.fit(X_CV, Y_CV)
+                opt_params_svm_fk=clf_svm_fk.best_params_
+                C_opt=opt_params_svm_fk['class_weight'][0]
+                score_svm=clf_svm_fk.best_score_
+                
+                t2=datetime.now()
+                dt=t2-t1
+                print('SVM CV finished after '+str(dt.total_seconds())+' sec')
+                print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
+            else:
+                opt_params_svm_fk={'class_weight':{0: 0.02, 1: 1}}
+                score_svm=0.595534973722555
+                print('Cross-validation skipped ... Using C+/C-='+\
+                      str(1/(opt_params_svm_fk['class_weight'][0])))
+        elif cv_type=='temp':
+            if cross_val==True:
+                
+                print('Grid search hyperparameter optimisation started for SVM-FK')
+                t1=datetime.now()
+                cutoff_temporal=2001-temp_year
+                idx_CV_train=tbl_ratio_fk[np.logical_and(tbl_ratio_fk.fyear>=1991,
+                                                   tbl_ratio_fk.fyear<cutoff_temporal)].index
+                X_CV_train=mapped_X[idx_CV_train]
+                Y_CV_train=tbl_ratio_fk.AAER_DUMMY[idx_CV_train]
+                idx_CV_test=tbl_ratio_fk[np.logical_and(tbl_ratio_fk.fyear>=cutoff_temporal,
+                                                   tbl_ratio_fk.fyear<2001)].index
+                X_CV_test=mapped_X[idx_CV_test]
+                Y_CV_test=tbl_ratio_fk.AAER_DUMMY[idx_CV_test]
+                
+                param_grid_svm={'class_weight':[\
+                                                {0:2e-3,1:1},{0:5e-3,1:1},
+                                                {0:1e-2,1:1},{0:2e-2,1:1},{0:5e-2,1:1},\
+                                                {0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]}
+                
+                    
+                temp_svm={'class_weight':[],'score':[]}
+                
+                for w in param_grid_svm['class_weight']:
+                    temp_svm['class_weight'].append(w)
+                    
+                    base_mdl_svm=SVC(shrinking=False,\
+                                        probability=False,
+                                        class_weight=w,\
+                                        random_state=0,max_iter=-1,\
+                                            tol=X_CV.shape[-1]*1e-3).fit(X_CV_train,Y_CV_train)
+                    predicted_test_svc=base_mdl_svm.decision_function(X_CV_test)
+                    
+                    predicted_test_svc=np.exp(predicted_test_svc)/(1+np.exp(predicted_test_svc))
+                    
+                    temp_svm['score'].append(roc_auc_score(Y_CV_test,predicted_test_svc))
+                
+                idx_opt_svm=temp_svm['score'].index(np.max(temp_svm['score']))
+                
+                C_opt=temp_svm['class_weight'][idx_opt_svm][0]
+                score_svm=temp_svm['score'][idx_opt_svm]
+                opt_params_svm_fk={'class_weight':temp_svm['class_weight'][idx_opt_svm]}
+                print(opt_params_svm_fk)
+                t2=datetime.now()
+                dt=t2-t1
+                print('SVM Temporal validation finished after '+str(dt.total_seconds())+' sec')
+                print('SVM: The optimal C+/C- ratio is '+str(1/C_opt))
+            else:
+                opt_params_svm_fk={'class_weight': {0: 0.01, 1: 1}}
+                score_svm=0.702738982926179
+                print('Temporal validation skipped ... Using C+/C-='+\
+                      str(1/(opt_params_svm_fk['class_weight'][0])))
 
         range_oos=range(start_OOS_year,end_OOS_year+1)
         serial_fraud_count=np.zeros(len(range_oos))
@@ -1439,7 +2290,6 @@ class ML_Fraud:
         precision_svm1=np.zeros(len(range_oos))
         ndcg_svm1=np.zeros(len(range_oos))
         ecm_svm1=np.zeros(len(range_oos))
-
 
         m=0
 
@@ -1536,39 +2386,52 @@ class ML_Fraud:
         print('average top percentile sensitivity for the period '+str(start_OOS_year)+' to '+\
               str(end_OOS_year)+' is '+str(round(np.mean(sensitivity_OOS_svm1)*100,2))+\
                   '% for SVM-FK')
-
+        f1_score_svm1=2*(precision_svm1*sensitivity_OOS_svm1)/\
+            (precision_svm1+sensitivity_OOS_svm1+1e-8)
         # create performance table now
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['SVM-FK-23']
-
-        perf_tbl_general['Roc']=np.mean(roc_svm)
+        
+        
+        perf_tbl_general['Roc']=str(np.round(
+            np.mean(roc_svm)*100,2))+'% ('+\
+            str(np.round(np.std(roc_svm)*100,2))+'%)'
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=np.mean(sensitivity_OOS_svm1)
+        perf_tbl_general['Sensitivity @ 1 Prc']=str(np.round(
+            np.mean(sensitivity_OOS_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_svm1)*100,2))+'%)'
 
-        perf_tbl_general['Specificity @ 1 Prc']=np.mean(specificity_OOS_svm1)
+        perf_tbl_general['Specificity @ 1 Prc']=str(np.round(
+            np.mean(specificity_OOS_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_svm1)*100,2))+'%)'
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=np.mean(precision_svm1)
-
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
+        perf_tbl_general['Precision @ 1 Prc']=str(np.round(
+            np.mean(precision_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(precision_svm1)*100,2))+'%)'
+        
+        
+        perf_tbl_general['F1 Score @ 1 Prc']=str(np.round(
+            np.mean(f1_score_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_svm1)*100,2))+'%)'
                                                     
-        perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_svm1)
+        perf_tbl_general['NDCG @ 1 Prc']=str(np.round(
+            np.mean(ndcg_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_svm1)*100,2))+'%)'
 
-        perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_svm1)
+        perf_tbl_general['ECM @ 1 Prc']=str(np.round(
+            np.mean(ecm_svm1)*100,2))+'% ('+\
+            str(np.round(np.std(ecm_svm1)*100,2))+'%)'
 
 
-        if case_window=='expanding':
+        if cv_type=='kfold':
             lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
-                '_'+case_window+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_SVM_FK.csv'
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_kfold_SVM_FK.csv'
         else:
             lbl_perf_tbl='perf_tbl_'+str(start_OOS_year)+'_'+str(end_OOS_year)+\
-                '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_SVM_FK.csv'
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_temporal_SVM_FK.csv'
 
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
@@ -1583,48 +2446,52 @@ class ML_Fraud:
         perf_tbl_general=pd.DataFrame()
         perf_tbl_general['models']=['SVM-FK-23']
 
-        perf_tbl_general['Roc']=np.mean(roc_svm[2:8])
+        perf_tbl_general['Roc']=str(np.round(
+            np.mean(roc_svm[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(roc_svm[2:8])*100,2))+'%)'
                                                     
-        perf_tbl_general['Sensitivity @ 1 Prc']=np.mean(sensitivity_OOS_svm1[2:8])
+        perf_tbl_general['Sensitivity @ 1 Prc']=str(np.round(
+            np.mean(sensitivity_OOS_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(sensitivity_OOS_svm1[2:8])*100,2))+'%)'
 
-        perf_tbl_general['Specificity @ 1 Prc']=np.mean(specificity_OOS_svm1[2:8])
+        perf_tbl_general['Specificity @ 1 Prc']=str(np.round(
+            np.mean(specificity_OOS_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(specificity_OOS_svm1[2:8])*100,2))+'%)'
+        
 
-        perf_tbl_general['Precision @ 1 Prc']=np.mean(precision_svm1[2:8])
-
-        perf_tbl_general['F1 Score @ 1 Prc']=2*(perf_tbl_general['Precision @ 1 Prc']*\
-                                              perf_tbl_general['Sensitivity @ 1 Prc'])/\
-                                                ((perf_tbl_general['Precision @ 1 Prc']+\
-                                                  perf_tbl_general['Sensitivity @ 1 Prc']))
+        perf_tbl_general['Precision @ 1 Prc']=str(np.round(
+            np.mean(precision_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(precision_svm1[2:8])*100,2))+'%)'
+        
+        
+        perf_tbl_general['F1 Score @ 1 Prc']=str(np.round(
+            np.mean(f1_score_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(f1_score_svm1[2:8])*100,2))+'%)'
                                                     
-        perf_tbl_general['NDCG @ 1 Prc']=np.mean(ndcg_svm1[2:8])
+        perf_tbl_general['NDCG @ 1 Prc']=str(np.round(
+            np.mean(ndcg_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(ndcg_svm1[2:8])*100,2))+'%)'
 
-        perf_tbl_general['ECM @ 1 Prc']=np.mean(ecm_svm1[2:8])
+        perf_tbl_general['ECM @ 1 Prc']=str(np.round(
+            np.mean(ecm_svm1[2:8])*100,2))+'% ('+\
+            str(np.round(np.std(ecm_svm1[2:8])*100,2))+'%)'                                  
 
-        perf_tbl_general['Sensitivity']=np.mean(sensitivity_OOS_svm[2:8])
-            
-        perf_tbl_general['Specificity']=np.mean(specificity_svm[2:8])
-
-        perf_tbl_general['Precision']=np.mean(precision_svm[2:8])
-
-        perf_tbl_general['F1 Score']=2*(perf_tbl_general['Precision']*\
-                                              perf_tbl_general['Sensitivity'])/\
-                                                ((perf_tbl_general['Precision']+\
-                                                  perf_tbl_general['Sensitivity']))                                             
-
-        if case_window=='expanding':
+        if cv_type=='kfold':
             lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
-                '_'+case_window+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_SVM_FK.csv'
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_kfold_SVM_FK.csv'
         else:
             lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
-                '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
-                str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                ',gap='+str(OOS_gap)+'_SVM_FK.csv'
+                    '_'+case_window+',OOS='+str(OOS_period)+',serial='+str(adjust_serial)+\
+                        ',gap='+str(OOS_gap)+'_temporal_SVM_FK.csv'
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
         
         ## End of analysis of 23 raw variables procedure as in Cecchini
+    
+    
+    
+    
     
     def analyse_forward(self,C_FN=30,C_FP=1):
         """
@@ -1703,7 +2570,7 @@ class ML_Fraud:
         adjust_serial=self.a_s
         cross_val=self.cv
         case_window=self.sa
-        fraud_df=self.df
+        fraud_df=self.df.copy(deep=True)
         write=self.w
 
         fyears_available=np.unique(fraud_df.fyear)
@@ -1724,31 +2591,34 @@ class ML_Fraud:
         tbl_fk_svm.pop('sstk')
 
         # cross-validation optimised parameters used below for the ratio-based ML models
-
-        n_opt=1000
-        r_opt=1e-4
-        score_rus28=0.6505273864153011
-
+        ### RUSBOost 28
+        n_opt_rus=200
+        r_opt_rus=1e-5
+        
+        ### Ratio-based ML models
         opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
         C_opt=opt_params_svm['class_weight'][0]
         kernel_opt=opt_params_svm['kernel']
         score_svm=0.701939025416111
-
-        score_lr=0.6694641818149761
-
+        
+        score_lr=0.7056438104977343
+        
         opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
         score_sgd=0.7026775920776185
 
         opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
         score_ada=0.700229450411913
-
-        opt_params={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
+        
+        opt_params_mlp={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
         score_mlp=0.706333862286029
+        
 
          
         # Optimised setting for Cecchini et al (2010) – SVM Kernel
         opt_params_svm_fk={'class_weight':{0: 0.02, 1: 1}}
         score_svm=0.595534973722555
+        
+        
         if isfile('features_fk.pkl')==True:    
             dict_db=pickle.load(open('features_fk.pkl','r+b'))
             tbl_ratio_fk=dict_db['lagged_Data']
@@ -1807,10 +2677,16 @@ class ML_Fraud:
             tbl_year_OOS=reduced_tbl.loc[np.logical_and(reduced_tbl.fyear>=yr,\
                                                         reduced_tbl.fyear<yr+OOS_period)]
             X=tbl_year_IS.iloc[:,-11:]
-            X_rus=tbl_year_IS.iloc[:,-39:-11]
+            
+            
             mean_vals=np.mean(X)
             std_vals=np.std(X)
             X=(X-mean_vals)/std_vals
+            
+            X_rus=tbl_year_IS.iloc[:,-39:-11]
+            
+            
+            
             Y=tbl_year_IS.AAER_DUMMY
             
             # Setting the IS for SVM-FK
@@ -1839,7 +2715,7 @@ class ML_Fraud:
             X_OOS=(X_OOS-mean_vals)/std_vals
             
             X_rus_OOS=tbl_year_OOS.iloc[:,-39:-11]
-            
+                        
             Y_OOS=tbl_year_OOS.AAER_DUMMY
             
             
@@ -1908,8 +2784,8 @@ class ML_Fraud:
             
             # RUSBoost of Bao et al 2020
             base_tree=DecisionTreeClassifier(min_samples_leaf=5)
-            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt,\
-                             learning_rate=r_opt,sampling_strategy=1,random_state=0)
+            bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt_rus,\
+                             learning_rate=r_opt_rus,sampling_strategy=1,random_state=0)
             clf_rusboost = bao_RUSboost.fit(X_rus,Y)
             probs_oos_fraud_rus=clf_rusboost.predict_proba(X_rus_OOS)[:,-1]
             
@@ -2042,8 +2918,8 @@ class ML_Fraud:
 
             
             # Multi Layer Perceptron
-            clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params['hidden_layer_sizes'], \
-                                  activation=opt_params['activation'],solver=opt_params['solver'],\
+            clf_mlp=MLPClassifier(hidden_layer_sizes=opt_params_mlp['hidden_layer_sizes'], \
+                                  activation=opt_params_mlp['activation'],solver=opt_params_mlp['solver'],\
                                                random_state=0,validation_fraction=.1)
             clf_mlp=clf_mlp.fit(X,Y)
             probs_oos_fraud_mlp=clf_mlp.predict_proba(X_OOS)[:,-1]
@@ -2336,20 +3212,17 @@ class ML_Fraud:
                             'learning_rate':[.1,5e-1,9e-1,1]}
                 
             best_perf_ada=0
-            class_weight_rng=[{0:2e-3,1:1},{0:5e-3,1:1},{0:1e-2,1:1},{0:2e-2,1:1},\
-                              {0:5e-2,1:1},{0:1e-1,1:1},{0:2e-1,1:1},{0:5e-1,1:1},{0:1e0,1:1}]
-            for class_ratio in class_weight_rng:
-                base_lr=LogisticRegression(random_state=0,class_weight=class_ratio)
-                base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
-                
-                clf_ada_lr = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
-                                   n_jobs=-1,cv=k_fold,refit=False)
-                clf_ada_lr.fit(X_CV, Y_CV)
-                score_ada_lr=clf_ada_lr.best_score_
-                if score_ada_lr>=best_perf_ada:
-                    best_perf_ada=score_ada_lr
-                    opt_params_ada_lr=clf_ada_lr.best_params_
-                    opt_class_weight_ada_lr=class_ratio
+            
+            base_lr=LogisticRegression(random_state=0,solver='newton-cg')
+            base_mdl_ada=AdaBoostClassifier(base_estimator=base_lr,random_state=0)
+            
+            clf_ada_lr = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
+                               n_jobs=-1,cv=k_fold,refit=False)
+            clf_ada_lr.fit(X_CV, Y_CV)
+            score_ada_lr=clf_ada_lr.best_score_
+            if score_ada_lr>=best_perf_ada:
+                best_perf_ada=score_ada_lr
+                opt_params_ada_lr=clf_ada_lr.best_params_
                 
             
             t2=datetime.now()
@@ -2359,25 +3232,22 @@ class ML_Fraud:
             print('AdaBoost-LR: The optimal number of estimators is '+\
                   str(opt_params_ada_lr['n_estimators'])+', and learning rate '+\
                       str(opt_params_ada_lr['learning_rate']))
-            imbalance_fact=opt_class_weight_ada_lr[1]/opt_class_weight_ada_lr[0]
-            print('AdaBoost-LR: The optimal C+/C- is '+str(imbalance_fact))
+            
             
             # optimise AdaBoost with tree learners (Ada-Tree): this is the basic model    
             t1=datetime.now()
             
             best_perf_ada_tree=0
-            for class_ratio in class_weight_rng:
-                base_tree=DecisionTreeClassifier(min_samples_leaf=5,class_weight=class_ratio)
-                base_mdl_ada=AdaBoostClassifier(base_estimator=base_tree,random_state=0)
-                clf_ada_tree = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
-                               n_jobs=-1,cv=k_fold,refit=False)
-                clf_ada_tree.fit(X_CV, Y_CV)
-                score_ada_tree=clf_ada_tree.best_score_
-                if score_ada_tree>best_perf_ada_tree:
-                    best_perf_ada_tree=score_ada_tree
-                    opt_params_ada_tree=clf_ada_tree.best_params_
-                    opt_class_weight_ada_tree=class_ratio
-                
+            
+            base_tree=DecisionTreeClassifier(min_samples_leaf=5)
+            base_mdl_ada=AdaBoostClassifier(base_estimator=base_tree,random_state=0)
+            clf_ada_tree = GridSearchCV(base_mdl_ada, param_grid_ada,scoring='roc_auc',\
+                           n_jobs=-1,cv=k_fold,refit=False)
+            clf_ada_tree.fit(X_CV, Y_CV)
+            score_ada_tree=clf_ada_tree.best_score_
+            if score_ada_tree>best_perf_ada_tree:
+                best_perf_ada_tree=score_ada_tree
+                opt_params_ada_tree=clf_ada_tree.best_params_                
             
             t2=datetime.now()
             dt=t2-t1
@@ -2387,8 +3257,6 @@ class ML_Fraud:
                   str(opt_params_ada_tree['n_estimators'])+', and learning rate '+\
                       str(opt_params_ada_tree['learning_rate']))
             
-            imbalance_fact_tree=opt_class_weight_ada_tree[1]/opt_class_weight_ada_tree[0]
-            print('AdaBoost-Tree: The optimal C+/C- is '+str(imbalance_fact_tree))
             print('Hyperparameter optimisation finished successfully.\nStarting the main analysis now...')
         else:
             
