@@ -22,7 +22,7 @@ Expected columns are:
 @author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 Common disclaimers apply. Subject to change at all time.
 
-Last review: 25/03/2023
+Last review: 27/03/2023
 """
 # %matplotlib inline
 import pandas as pd
@@ -36,7 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class ML_Fraud:
-    __version__='1.0.6'
+    __version__='1.0.7'
     def __init__(self,sample_start=1991,test_sample=range(2001,2011),
                  OOS_per=1,OOS_gap=0,sampling='expanding',adjust_serial=True,
                  cv_type='kfold',temp_year=1,cv_flag=False,cv_k=10,write=True,IS_per=10):
@@ -2301,21 +2301,16 @@ class ML_Fraud:
             tbl_year_OOS=tbl_year_OOS.reset_index(drop=True)
                 
             
-            X=tbl_year_IS.iloc[:,-11:]
-            mean_vals=np.mean(X)
-            std_vals=np.std(X)
-            X=(X-mean_vals)/std_vals
+            X=tbl_year_IS.iloc[:,-28:]
             Y=tbl_year_IS.AAER_DUMMY
             
-            X_OOS=tbl_year_OOS.iloc[:,-11:]
-            X_OOS=(X_OOS-mean_vals)/std_vals
-            
+            X_OOS=tbl_year_OOS.iloc[:,-28:]
             Y_OOS=tbl_year_OOS.AAER_DUMMY
             n_P=np.sum(Y_OOS==1)
             n_N=np.sum(Y_OOS==0)
             
             
-            # RUSBoost with 11 ratios
+            # RUSBoost with 28 ratios
             
             base_tree=DecisionTreeClassifier(min_samples_leaf=5)
             bao_RUSboost=RUSBoostClassifier(base_estimator=base_tree,n_estimators=n_opt_rus,\
