@@ -36,7 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class ML_Fraud:
-    __version__='1.0.8'
+    __version__='1.0.9'
     def __init__(self,sample_start=1991,test_sample=range(2001,2011),
                  OOS_per=1,OOS_gap=0,sampling='expanding',adjust_serial=True,
                  cv_type='kfold',temp_year=1,cv_flag=False,cv_k=10,write=True,IS_per=10):
@@ -2897,23 +2897,23 @@ class ML_Fraud:
                 lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
                     '_'+case_window+',OOS='+str(OOS_period)+','+\
                     str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+                    ',gap='+str(OOS_gap)+'_28raw.csv'
             else:
                 lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
                     '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
                     str(k_fold)+'fold'+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+                    ',gap='+str(OOS_gap)+'_28raw.csv'
         else:
             if case_window=='expanding':
                 lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
                     '_'+case_window+',OOS='+str(OOS_period)+','+\
                     'temporal'+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+                    ',gap='+str(OOS_gap)+'_28raw.csv'
             else:
                 lbl_perf_tbl='perf_tbl_'+str(2003)+'_'+str(2008)+\
                     '_IS='+str(IS_period)+',OOS='+str(OOS_period)+','+\
                     'temporal'+',serial='+str(adjust_serial)+\
-                    ',gap='+str(OOS_gap)+'_11ratios.csv'
+                    ',gap='+str(OOS_gap)+'_28raw.csv'
         if write==True:
             perf_tbl_general.to_csv(lbl_perf_tbl,index=False)
         
