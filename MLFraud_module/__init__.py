@@ -36,7 +36,7 @@ import warnings
 warnings.filterwarnings("ignore")
 
 class ML_Fraud:
-    __version__='1.0.7'
+    __version__='1.0.8'
     def __init__(self,sample_start=1991,test_sample=range(2001,2011),
                  OOS_per=1,OOS_gap=0,sampling='expanding',adjust_serial=True,
                  cv_type='kfold',temp_year=1,cv_flag=False,cv_k=10,write=True,IS_per=10):
@@ -480,6 +480,7 @@ class ML_Fraud:
             – C_FP: Cost of a False Positive for ECM
 
         Predictive models:
+            – RUSBoost based on Scikit module (RUSBoost)
             – Support Vector Machine (SVM)
             – Logistic Regression (LR)
             – SGD Tree Boosting (SGD)
@@ -731,7 +732,7 @@ class ML_Fraud:
                 score_mlp=0.706333862286029
                 
                 
-                print('CV skipped ... using defaults for ratio case')
+                print('CV skipped ... using defaults for 11 ratios case')
                 
         elif cv_type=='temp':
             if cross_val==True: 
@@ -1692,8 +1693,8 @@ class ML_Fraud:
         
     def analyse_raw(self, C_FN=30,C_FP=1):
         """
-        This code replicates the RUSBoost model of Bao et al (2020).
-        Skipping cross-validation sets the number of estimators to 1000.
+        This code replicates the previous ML models using raw variables as in 
+        Bao et al (2020). 
 
         Parameters:
             – C_FN: Cost of a False Negative for ECM
@@ -1701,7 +1702,14 @@ class ML_Fraud:
         
         
         Predictive models:
-            – RUSBoost based on Scikit module
+            – RUSBoost based on Scikit module (RUSBoost)
+            – Support Vector Machine (SVM)
+            – Logistic Regression (LR)
+            – SGD Tree Boosting (SGD)
+            – Adaptive Boosting with Logistic Regression/LogitBoost (ADA)
+            – MUlti-layered Perceptron (MLP)
+            – FUSED (weighted average of estimated probs of other methods)
+            
         Outputs: 
         Main results are stored in the table variable "perf_tbl_general" written into
         2 csv files: time period 2001-2010 and 2003-2008
@@ -1713,6 +1721,8 @@ class ML_Fraud:
         Warnings: 
             – Running this code can take up to 10 mins when CV is skipped. 
             These figures are estimates based on a MacBook Pro 2021.
+            – This function standardises the inputs for the SVM case since the 
+            training does not converge otherwise within 3 days.
             
         """
         
@@ -1764,6 +1774,10 @@ class ML_Fraud:
         misstate_firms=np.unique(tbl_year_IS_CV.gvkey[tbl_year_IS_CV.AAER_DUMMY==1])
 
         X_CV=tbl_year_IS_CV.iloc[:,-28:]
+        ## Exception with SVM's inputs is due to SVM not converging otherwise
+        mean_vals=np.mean(X_CV)
+        std_vals=np.std(X_CV)
+        X_CV_SVM=(X_CV-mean_vals)/std_vals
 
         Y_CV=tbl_year_IS_CV.AAER_DUMMY
 
@@ -1794,7 +1808,7 @@ class ML_Fraud:
                 print('RUSBoost CV finished after '+str(dt.total_seconds())+' sec')
                 print('RUSBoost: The optimal number of estimators is '+str(n_opt_rus))
                 
-                # optimize SVM grid
+                # # optimize SVM grid
                 
                 print('Grid search hyperparameter optimisation started for SVM')
                 t1=datetime.now()
@@ -1807,8 +1821,8 @@ class ML_Fraud:
                                         tol=X_CV.shape[-1]*1e-3)
                 
                 clf_svm = GridSearchCV(base_mdl_svm, param_grid_svm,scoring='roc_auc',\
-                                   n_jobs=-1,cv=k_fold,refit=False)
-                clf_svm.fit(X_CV, Y_CV)
+                                    n_jobs=-1,cv=k_fold,refit=False)
+                clf_svm.fit(X_CV_SVM, Y_CV)
                 opt_params_svm=clf_svm.best_params_
                 C_opt=opt_params_svm['class_weight'][0]
                 kernel_opt=opt_params_svm['kernel']
@@ -1921,36 +1935,38 @@ class ML_Fraud:
                 
                 n_opt_rus=200
                 r_opt_rus=1e-5
-                score_rus=0.6953935928499526
+                score_rus=0.7491029920346545
                 
-                opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'linear'}
+                opt_params_svm={'class_weight': {0: 0.01, 1: 1}, 'kernel': 'rbf'}
                 C_opt=opt_params_svm['class_weight'][0]
                 kernel_opt=opt_params_svm['kernel']
-                score_svm=0.701939025416111
+                score_svm=0.7062339993983885
                 
-                score_lr=0.7056438104977343
+                score_lr=0.748358810703434
                 
                 opt_params_sgd={'class_weight': {0: 5e-3, 1: 1}, 'loss': 'log', 'penalty': 'l2'}
                 score_sgd=0.7026775920776185
     
-                opt_params_ada={'learning_rate': 0.9, 'n_estimators': 20}
-                score_ada=0.700229450411913
+                opt_params_ada={'learning_rate': 0.1, 'n_estimators': 10}
+                score_ada=0.6975520667385693
+                
+                opt_params_mlp={'activation': 'identity', 'hidden_layer_sizes': 2, 'solver': 'adam'}
+                score_mlp=0.6028686500874612
                 
                 
-                opt_params_mlp={'activation': 'logistic', 'hidden_layer_sizes': 5, 'solver': 'adam'}
-                score_mlp=0.706333862286029
-                
-                
-                print('CV skipped ... using defaults for ratio case')
+                print('CV skipped ... using defaults for 28 raw variables case')
                 
         elif cv_type=='temp':
             if cross_val==True: 
                 # optimize RUSBoost grid
                 cutoff_temporal=2001-temp_year
+                
                 X_CV_train=X_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
+                X_CV_SVM_train=X_CV_SVM[tbl_year_IS_CV['fyear']<cutoff_temporal]
                 Y_CV_train=Y_CV[tbl_year_IS_CV['fyear']<cutoff_temporal]
                 
                 X_CV_test=X_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
+                X_CV_SVM_test=X_CV_SVM[tbl_year_IS_CV['fyear']>=cutoff_temporal]
                 Y_CV_test=Y_CV[tbl_year_IS_CV['fyear']>=cutoff_temporal]
                 
                 
@@ -2010,8 +2026,8 @@ class ML_Fraud:
                                             probability=False,
                                             kernel=k,class_weight=w,\
                                             random_state=0,max_iter=-1,\
-                                                tol=X_CV.shape[-1]*1e-3).fit(X_CV_train,Y_CV_train)
-                        predicted_test_svc=base_mdl_svm.decision_function(X_CV_test)
+                                                tol=X_CV.shape[-1]*1e-3).fit(X_CV_SVM_train,Y_CV_train)
+                        predicted_test_svc=base_mdl_svm.decision_function(X_CV_SVM_test)
                         
                         predicted_test_svc=np.exp(predicted_test_svc)/(1+np.exp(predicted_test_svc))
                         
@@ -2302,9 +2318,17 @@ class ML_Fraud:
                 
             
             X=tbl_year_IS.iloc[:,-28:]
+            
+            ## Exception with SVM's inputs is due to SVM not converging otherwise
+            mean_vals=np.mean(X)
+            std_vals=np.std(X)
+            X_SVM=(X-mean_vals)/std_vals
+            
+            
             Y=tbl_year_IS.AAER_DUMMY
             
             X_OOS=tbl_year_OOS.iloc[:,-28:]
+            X_SVM_OOS=(X_OOS-mean_vals)/std_vals
             Y_OOS=tbl_year_OOS.AAER_DUMMY
             n_P=np.sum(Y_OOS==1)
             n_N=np.sum(Y_OOS==0)
@@ -2339,14 +2363,14 @@ class ML_Fraud:
             
             
             # Support Vector Machines
-            
+            ## Exception with SVM's inputs is due to SVM not converging otherwise
             clf_svm=SVC(class_weight={0:C_opt,1:1},kernel=kernel_opt,shrinking=False,\
                             probability=False,random_state=0,max_iter=-1,\
                                 tol=X.shape[-1]*1e-3)
                 
-            clf_svm=clf_svm.fit(X,Y)
+            clf_svm=clf_svm.fit(X_SVM,Y)
             
-            pred_test_svm=clf_svm.decision_function(X_OOS)
+            pred_test_svm=clf_svm.decision_function(X_SVM_OOS)
             probs_oos_fraud_svm=np.exp(pred_test_svm)/(1+np.exp(pred_test_svm))
             
             roc_svm[m]=roc_auc_score(Y_OOS,probs_oos_fraud_svm)
