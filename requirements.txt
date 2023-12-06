@@ -6,9 +6,12 @@ pandas
 matplotlib
 scipy
 scikit-learn
+gymnasium
 imblearn
 statsmodels
+torch
+seaborn
 
 #@author: Arman Hassanniakalager GitHub: https://github.com/hkalager
 #Common disclaimers apply. Subject to change at all time.
-#Last review: 21/06/2022
+#Last review: 06/12/2023
