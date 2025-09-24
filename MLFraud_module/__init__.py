@@ -2872,8 +2872,8 @@ class ML_Fraud:
                       ', class weight is ' + str(cw_opt) + ', score is ' + str(score_rdf))
             else:
                 estimators_rdf = 10
-                criterion_opt = 'entropy'
-                cw_opt = {0: 1e0, 1: 1}
+                criterion_opt = 'gini'
+                cw_opt = {0: 0.5, 1: 1}
                 print(f'{pd.Timestamp.now()}:Random Forest: Using the default hyperparameters: ')
 
         range_oos = range(start_OOS_year, end_OOS_year + 1, OOS_period)  # (2001,2010+1,1)
