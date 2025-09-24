@@ -1,0 +1,24 @@
+name: ml-fraud
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - matplotlib
+  - scipy
+  - scikit-learn=1.3.2
+  - imbalanced-learn=0.12.0
+  - statsmodels
+
+# Optional developer tools
+  - pip
+
+  # pip section: installs pip-only packages; '-e .' will install this project
+  # in editable/develop mode during env creation (PEP 660 support required)
+  - pip:
+    - -e .
+
+# If you need additional pip-only packages, add them under a pip: section or
+# keep a `requirements.txt` and install with pip inside the conda env.

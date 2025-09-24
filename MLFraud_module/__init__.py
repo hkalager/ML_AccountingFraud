@@ -34,13 +34,11 @@ import numpy as np
 import pandas as pd
 from statsmodels.tsa.stattools import kpss
 
-from MLFraud_module.extra_codes import calc_vif, ndcg_k
-
 warnings.filterwarnings("ignore")
 
 
 class ML_Fraud:
-    __version__ = '1.0.9'
+    __version__ = '1.0.10'
 
     def __init__(self, sample_start=1991, test_sample=range(2001, 2011),
                  OOS_per=1, OOS_gap=0, sampling='expanding', adjust_serial=True,
@@ -553,8 +551,7 @@ class ML_Fraud:
         P_f = np.sum(Y_CV == 1) / len(Y_CV)
         P_nf = 1 - P_f
 
-        print('prior probablity of fraud between ' + str(sample_start) + '-' +
-              str(start_OOS_year - 1) + ' is ' + str(np.round(P_f * 100, 2)) + '%')
+        print(f'prior probablity of fraud between {sample_start}-{start_OOS_year - 1} is {np.round(P_f * 100, 2)}%')
 
         # redo cross-validation if you wish
         if cv_type == 'kfold':
@@ -2788,7 +2785,7 @@ class ML_Fraud:
 
         ## End of analysis of 28 raw variables procedure
 
-    def random_forest(self, C_FN=30, C_FP=1):
+    def analyse_rf(self, C_FN=30, C_FP=1):
         """
         This code uses 11 financial ratios to predict the likelihood of fraud in a financial statement.
 
@@ -2800,6 +2797,7 @@ class ML_Fraud:
         from imblearn.pipeline import Pipeline
         from sklearn.model_selection import GridSearchCV
         from sklearn.metrics import roc_auc_score
+        from MLFraud_module.extra_codes import ndcg_k
 
         t0 = datetime.now()
         # setting the parameters
@@ -2845,42 +2843,38 @@ class ML_Fraud:
         if cv_type == 'kfold':
             if cross_val == True:
                 # optimize random forest
-                pipe_rdf = Pipeline([('scale', StandardScaler()), \
-                                     ('smote', SMOTE(random_state=0)),
-                                     ('base_mdl_rdf',
-                                      RandomForestClassifier(max_leaf_nodes=2, max_features=11, bootstrap=True, \
-                                                             random_state=0, n_jobs=-1))])
-
-                estimators = list(range(10, 301, 10))
-                # max_depth = list(range(0,101,10))
-                # class_weight = [{0: 1 / x, 1: 1} for x in range(10, 501, 10)]
+                print("Setting the base model and the hyperparameter grid")
+                base_mdl_rdf=RandomForestClassifier(max_features=11, bootstrap=False, \
+                                                             random_state=0, n_jobs=-1)
 
                 param_grid_rdf = {
-                    'base_mdl_rdf__n_estimators': estimators,  # Number of trees
-                    'base_mdl_rdf__max_depth': [None, 2, 5, 10, 15, 20, 50, 100],  # Maximum depth of trees
-                    'base_mdl_rdf__min_samples_split': [2, 5, 10, 20, 50, 100],
+                    'n_estimators': [10, 20, 50],  # Number of trees
                     # Minimum samples required to split a node
-                    'base_mdl_rdf__criterion': ['gini', 'entropy'],  # Splitting criterion
-                    'base_mdl_rdf__class_weight': [None, 'balanced'],
+                    'criterion': ['gini', 'entropy'],  # Splitting criterion
+                    'class_weight': [{0: 2e-3, 1: 1}, {0: 5e-3, 1: 1}, {0: 1e-2, 1: 1}, \
+                                                   {0: 2e-2, 1: 1}, {0: 5e-2, 1: 1}, {0: 1e-1, 1: 1}, \
+                                                   {0: 2e-1, 1: 1}, {0: 5e-1, 1: 1}, {0: 1e0, 1: 1}],
                 }
-
-                clf_rdf = GridSearchCV(pipe_rdf, param_grid_rdf, scoring='roc_auc', \
+                print(f"{pd.Timestamp.now()}: Running a {k_fold}-fold cross-validation to find the optimal hyperparameters")
+                clf_rdf = GridSearchCV(base_mdl_rdf, param_grid_rdf, scoring='roc_auc', \
                                        n_jobs=-1, cv=k_fold, refit=False)
 
                 clf_rdf.fit(X_CV, Y_CV)
                 opt_params_rdf = clf_rdf.best_params_
-                estimators_rdf = opt_params_rdf['base_mdl_rdf__n_estimators']
-                max_depth_rdf = opt_params_rdf['base_mdl_rdf__max_depth']
-                min_samples_split_opt = opt_params_rdf['base_mdl_rdf__min_samples_split']
-                criterion_opt = opt_params_rdf['base_mdl_rdf__criterion']
-                cw_opt = opt_params_rdf['base_mdl_rdf__class_weight']
+                estimators_rdf = opt_params_rdf['n_estimators']
+                criterion_opt = opt_params_rdf['criterion']
+                cw_opt = opt_params_rdf['class_weight']
                 score_rdf = clf_rdf.best_score_
 
-                print('Random Forest: The optimal number of estimators is ' + \
-                      str(estimators_rdf) + ', max depth is' + str(max_depth_rdf) + ', min samples split is' + \
-                      str(min_samples_split_opt) + \
-                      ', criterion is' + str(criterion_opt) + \
-                      ', class weight is' + str(cw_opt) + ', score is' + str(score_rdf))
+                print(f'{pd.Timestamp.now()}:Random Forest: The optimal number of estimators is ' + \
+                      str(estimators_rdf) + ', min samples split is ' + \
+                      ', criterion is ' + str(criterion_opt) + \
+                      ', class weight is ' + str(cw_opt) + ', score is ' + str(score_rdf))
+            else:
+                estimators_rdf = 10
+                criterion_opt = 'entropy'
+                cw_opt = {0: 1e0, 1: 1}
+                print(f'{pd.Timestamp.now()}:Random Forest: Using the default hyperparameters: ')
 
         range_oos = range(start_OOS_year, end_OOS_year + 1, OOS_period)  # (2001,2010+1,1)
 
@@ -2912,6 +2906,8 @@ class ML_Fraud:
             # how many years between training and testing sample:
             # expanding: 1991-2000, 1991-2001
             # rolling: 1991-2000, 1992-2001
+            print(f'{pd.Timestamp.now()}: Running the OOS test for the year {yr}, the IS sample is from ' + \
+                  str(year_start_IS) + ' to ' + str(yr - OOS_gap - 1))
             tbl_year_IS = reduced_tbl.loc[np.logical_and(reduced_tbl.fyear < yr - OOS_gap, \
                                                          reduced_tbl.fyear >= year_start_IS)]
             tbl_year_IS = tbl_year_IS.reset_index(drop=True)
@@ -2961,11 +2957,8 @@ class ML_Fraud:
             clf_rdf = RandomForestClassifier(
                 n_estimators=estimators_rdf,
                 criterion=criterion_opt,
-                max_depth=max_depth_rdf,
-                min_samples_split=min_samples_split_opt,
                 max_features=11,
-                bootstrap=True,
-                max_leaf_nodes=2,
+                bootstrap=False,
                 class_weight=cw_opt,
                 random_state=0,
                 n_jobs=-1)
@@ -3022,8 +3015,13 @@ class ML_Fraud:
                                             Y_OOS == 1))
             FP_rdf2 = np.sum(np.logical_and(probs_oos_fraud_rdf >= cutoff_OOS_rdf, \
                                             Y_OOS == 0))
-
             ecm_rdf1[m] = C_FN * P_f * FN_rdf2 / n_P + C_FP * P_nf * FP_rdf2 / n_N
+            t2 = datetime.now()
+            dt = t2 - t1
+            print('analysis finished for OOS period ' + str(yr) + ' after ' + str(dt.total_seconds()) + ' sec')
+            m += 1
+            # end of for loop
+
 
         f1_score_rdf1_training = 2 * (precision_rdf1_training * sensitivity_rdf1_training) / \
                                  (precision_rdf1_training + sensitivity_rdf1_training + 1e-8)
@@ -3159,6 +3157,7 @@ class ML_Fraud:
         t_last = datetime.now()
         dt_total = t_last - t0
         print('total run time is ' + str(dt_total.total_seconds()) + ' sec')
+        ## End of analysis of Random Forest procedure
 
     def analyse_fk(self, C_FN=30, C_FP=1, record_matrix=True):
         """

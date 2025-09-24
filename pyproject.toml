@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel", "pip>=20.3"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ML_AccountingFraud"
+version = "0.0.0"
+description = "Machine learning models and evaluation code for accounting fraud detection"
+authors = [ { name = "Arman Hassanniakalager", url = "https://github.com/hkalager" } ]
+dynamic = ["dependencies"]
+
+# Minimal package layout: mark as namespace package by providing a package directory.
+[tool.setuptools]
+packages = ["MLFraud_module"]
