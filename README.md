@@ -11,7 +11,15 @@ The data is a merged table from COMPUSTAT (via WRDS) and SEC AAER Dataset (avail
 
 1) In a terminal run the following script to make sure necessary requirements are loaded:
 
-  `pip install -r requirements.txt`
+```bash
+conda install conda-build
+# create env (reads environment.yml in current directory)
+conda env create -f environment.yml
+# activate now
+conda activate ml-fraud
+# to make the package accessible you can uncomment below
+# conda develop /path/to/your/package
+```
 
 2) In a Python environment run the following to load the module:
 
