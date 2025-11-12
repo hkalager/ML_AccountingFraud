@@ -35,6 +35,7 @@ import numpy as np
 # %matplotlib inline
 import pandas as pd
 from statsmodels.tsa.stattools import kpss
+from MLFraud_module.extra_codes import calc_vif
 
 warnings.filterwarnings("ignore")
 
@@ -83,11 +84,12 @@ class ML_Fraud:
               sample is used (Default=10)
         """
         if not isfile("FraudDB2020.csv"):
-            df = pd.DataFrame()
+            df_list = []
             for s in range(1, 5):
                 fl_name = "FraudDB2020_Part" + str(s) + ".csv"
                 new_df = pd.read_csv(fl_name)
-                df = df.append(new_df)
+                df_list.append(new_df)
+            df = pd.concat(df_list, ignore_index=True)
             df.to_csv("FraudDB2020.csv", index=False)
 
         df = pd.read_csv("FraudDB2020.csv")
@@ -139,7 +141,6 @@ class ML_Fraud:
         fraud_df = self.df
         sample_start = self.ss
         sample_end = self.se
-        end_OOS_year = self.ts[-1]
         IS_per = self.ip
         write = self.w
 
