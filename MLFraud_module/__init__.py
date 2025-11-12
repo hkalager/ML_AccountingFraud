@@ -5282,8 +5282,8 @@ class ML_Fraud:
 
         idx_real = np.where(
             np.logical_and(
-                np.isnan(X_CV).any(axis=1) == False,
-                np.isinf(X_CV).any(axis=1) == False,
+                ~np.isnan(X_CV).any(axis=1),
+                ~np.isinf(X_CV).any(axis=1),
             )
         )[0]
         X_CV = X_CV[idx_real, :]
@@ -5480,8 +5480,8 @@ class ML_Fraud:
             X = mapped_X[idx_IS, :]
             idx_real = np.where(
                 np.logical_and(
-                    np.isnan(X).any(axis=1) == False,
-                    np.isinf(X).any(axis=1) == False,
+                    ~np.isnan(X).any(axis=1),
+                    ~np.isinf(X).any(axis=1),
                 )
             )[0]
             X = X[idx_real, :]
@@ -5492,8 +5492,8 @@ class ML_Fraud:
             X_OOS = mapped_X[tbl_year_OOS.index, :]
             idx_real_OOS = np.where(
                 np.logical_and(
-                    np.isnan(X_OOS).any(axis=1) == False,
-                    np.isinf(X_OOS).any(axis=1) == False,
+                    ~np.isnan(X_OOS).any(axis=1),
+                    ~np.isinf(X_OOS).any(axis=1),
                 )
             )[0]
             X_OOS = X_OOS[idx_real_OOS, :]
@@ -5994,8 +5994,8 @@ class ML_Fraud:
             X_FK = mapped_X[idx_IS_FK, :]
             idx_real = np.where(
                 np.logical_and(
-                    np.isnan(X_FK).any(axis=1) == False,
-                    np.isinf(X_FK).any(axis=1) == False,
+                    ~np.isnan(X_FK).any(axis=1),
+                    ~np.isinf(X_FK).any(axis=1),
                 )
             )[0]
             X_FK = X_FK[idx_real, :]
@@ -6035,8 +6035,8 @@ class ML_Fraud:
             X_OOS_FK = mapped_X[tbl_fk_OOS.index, :]
             idx_real_OOS_FK = np.where(
                 np.logical_and(
-                    np.isnan(X_OOS_FK).any(axis=1) == False,
-                    np.isinf(X_OOS_FK).any(axis=1) == False,
+                    ~np.isnan(X_OOS_FK).any(axis=1),
+                    ~np.isinf(X_OOS_FK).any(axis=1),
                 )
             )[0]
             X_OOS_FK = X_OOS_FK[idx_real_OOS_FK, :]
