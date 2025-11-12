@@ -86,7 +86,7 @@ class ML_Fraud:
         if not isfile("FraudDB2020.csv"):
             df_list = []
             for s in range(1, 5):
-                fl_name = "FraudDB2020_Part" + str(s) + ".csv"
+                fl_name = f"FraudDB2020_Part{s}.csv"
                 new_df = pd.read_csv(fl_name)
                 df_list.append(new_df)
             df = pd.concat(df_list, ignore_index=True)
@@ -165,12 +165,12 @@ class ML_Fraud:
         )
 
         print(
-            " Average number of new frauds per year is "
-            + str(basic_table["Num_fraud"].mean())
+            f" Average number of new frauds per year is "
+            f"{basic_table['Num_fraud'].mean()}"
         )
         print(
-            " Average number of unique firms per year is "
-            + str(basic_table["Num_firm"].mean())
+            f" Average number of unique firms per year is "
+            f"{basic_table['Num_firm'].mean()}"
         )
 
         kpss_test_fraud = kpss(
@@ -343,10 +343,7 @@ class ML_Fraud:
         write = self.w
 
         print(
-            "starting the MC analysis for case B="
-            + str(B)
-            + ", serial treatment="
-            + str(adjust_serial)
+            f"starting the MC analysis for case B={B}, serial treatment={adjust_serial}"
         )
         t000 = datetime.now()
         reduced_tbl_1 = fraud_df.iloc[:, [0, 1, 3, 7, 8]]
