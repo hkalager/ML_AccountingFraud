@@ -1557,7 +1557,7 @@ class ML_Fraud:
 
             base_tree = DecisionTreeClassifier(min_samples_leaf=5)
             bao_RUSboost = RUSBoostClassifier(
-                base_estimator=base_tree,
+                estimator=base_tree,
                 n_estimators=n_opt_rus,
                 learning_rate=r_opt_rus,
                 sampling_strategy=1,
