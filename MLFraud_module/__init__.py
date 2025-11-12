@@ -82,7 +82,7 @@ class ML_Fraud:
             - IS_per: Number of calendar years in case a rolling training
               sample is used (Default=10)
         """
-        if isfile("FraudDB2020.csv") == False:
+        if not isfile("FraudDB2020.csv"):
             df = pd.DataFrame()
             for s in range(1, 5):
                 fl_name = "FraudDB2020_Part" + str(s) + ".csv"
@@ -197,7 +197,7 @@ class ML_Fraud:
             reduced_tbl_ratio - np.mean(reduced_tbl_ratio)
         ) / np.std(reduced_tbl_ratio)
         vif_ratios = calc_vif(reduced_tbl_ratio)
-        if write == True:
+        if write:
             vif_ratios.to_csv("VIF_11ratio.csv", index=False)
 
         reduced_tbl_raw28 = fraud_df.iloc[:, 9:-14]
@@ -205,7 +205,7 @@ class ML_Fraud:
             reduced_tbl_raw28 - np.mean(reduced_tbl_raw28)
         ) / np.std(reduced_tbl_raw28)
         vif_raw28 = calc_vif(reduced_tbl_raw28)
-        if write == True:
+        if write:
             vif_raw28.to_csv("VIF_28raw.csv", index=False)
 
         reduced_tbl_raw23 = fraud_df.iloc[:, 9:-14]
@@ -218,7 +218,7 @@ class ML_Fraud:
             reduced_tbl_raw23 - np.mean(reduced_tbl_raw23)
         ) / np.std(reduced_tbl_raw23)
         vif_raw23 = calc_vif(reduced_tbl_raw23)
-        if write == True:
+        if write:
             vif_raw23.to_csv("VIF_23raw.csv", index=False)
         print("VIF results generated successfully ... ")
 
@@ -242,7 +242,7 @@ class ML_Fraud:
             sum_Stat_tbl.loc[itr, "std"] = round(np.std(sel_data), 4)
             itr += 1
 
-        if write == True:
+        if write:
             sum_Stat_tbl.to_csv("SumStats.csv", index=False)
             print("Summary statistics generated successfully ... ")
 
@@ -280,7 +280,7 @@ class ML_Fraud:
         ser_tbl["Serial Fraud Case"] = serial_fraud_count
         ser_tbl["Serial over Total"] = serial_fraud_count / fraud_count
 
-        if write == True:
+        if write:
             ser_tbl.to_csv("SerialStats.csv", index=False)
             print("Serial fraud results generated successfully ...")
 
@@ -410,7 +410,7 @@ class ML_Fraud:
             Y_test_b = Y_CV.iloc[test_idx]
             init_positive = np.sum(Y_test_b)
             count_positive_test.append(init_positive)
-            if adjust_serial == True:
+            if adjust_serial:
                 misstate_firms_train = np.unique(
                     mini_tbl_train[mini_tbl_train.AAER_DUMMY == 1]["gvkey"]
                 )
@@ -418,13 +418,13 @@ class ML_Fraud:
                 idx_is_serial = np.isin(
                     mini_tbl_test["gvkey"], misstate_firms_train
                 )
-                X_test_b = X_test_b[idx_is_serial == False]
-                X_test_raw_b = X_test_raw_b[idx_is_serial == False]
-                Y_test_b = Y_test_b[idx_is_serial == False]
+                X_test_b = X_test_b[~(idx_is_serial)]
+                X_test_raw_b = X_test_raw_b[~(idx_is_serial)]
+                Y_test_b = Y_test_b[~(idx_is_serial)]
 
                 adj_positive = np.sum(Y_test_b)
                 drop_serial.append(init_positive - adj_positive)
-            elif adjust_serial == False:
+            elif not adjust_serial:
                 drop_serial.append(0)
             elif adjust_serial == "biased":
                 init_train = np.sum(Y_train_b)
@@ -634,7 +634,7 @@ class ML_Fraud:
             + ".csv"
         )
 
-        if write == True:
+        if write:
             result_tbl.to_csv(lbl_perf_tbl, index=True)
 
         t001 = datetime.now()
@@ -748,7 +748,7 @@ class ML_Fraud:
 
         # redo cross-validation if you wish
         if cv_type == "kfold":
-            if cross_val == True:
+            if cross_val:
                 # optimize RUSBoost grid
                 print(
                     "Grid search hyperparameter optimisation started for "
@@ -1048,7 +1048,7 @@ class ML_Fraud:
                 print("CV skipped ... using defaults for 11 ratios case")
 
         elif cv_type == "temp":
-            if cross_val == True:
+            if cross_val:
                 # optimize RUSBoost grid
                 cutoff_temporal = 2001 - temp_year
                 X_CV_train = X_CV[tbl_year_IS_CV["fyear"] < cutoff_temporal]
@@ -1540,7 +1540,7 @@ class ML_Fraud:
                 )
             ]
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -1549,7 +1549,7 @@ class ML_Fraud:
             else:
                 ok_index = np.ones(tbl_year_OOS.shape[0]).astype(bool)
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
@@ -2286,7 +2286,7 @@ class ML_Fraud:
                     + "_11ratios.csv"
                 )
 
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
         print(perf_tbl_general)
         t_last = datetime.now()
@@ -2599,7 +2599,7 @@ class ML_Fraud:
                     + str(OOS_gap)
                     + "_11ratios.csv"
                 )
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
         ## End of analysis of 11 ratios procedure
@@ -2703,7 +2703,7 @@ class ML_Fraud:
 
         # redo cross-validation if you wish
         if cv_type == "kfold":
-            if cross_val == True:
+            if cross_val:
                 # optimize RUSBoost grid
                 print(
                     "Grid search hyperparameter optimisation started for "
@@ -3005,7 +3005,7 @@ class ML_Fraud:
                 )
 
         elif cv_type == "temp":
-            if cross_val == True:
+            if cross_val:
                 # optimize RUSBoost grid
                 cutoff_temporal = 2001 - temp_year
 
@@ -3505,7 +3505,7 @@ class ML_Fraud:
                 )
             ]
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -3514,7 +3514,7 @@ class ML_Fraud:
             else:
                 ok_index = np.ones(tbl_year_OOS.shape[0]).astype(bool)
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -28:]
@@ -4255,7 +4255,7 @@ class ML_Fraud:
                     + "_28raw.csv"
                 )
 
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
         print(perf_tbl_general)
         t_last = datetime.now()
@@ -4542,7 +4542,7 @@ class ML_Fraud:
                     f"perf_tbl_2003_2008_IS={IS_period},OOS={OOS_period},"
                     f"temporal,serial={adjust_serial},gap={OOS_gap}_28raw.csv"
                 )
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
         ## End of analysis of 28 raw variables procedure
@@ -4616,7 +4616,7 @@ class ML_Fraud:
 
         # redo cross-validation if you wish
         if cv_type == "kfold":
-            if cross_val == True:
+            if cross_val:
                 # optimize random forest
                 print("Setting the base model and the hyperparameter grid")
                 base_mdl_rdf = RandomForestClassifier(
@@ -4743,7 +4743,7 @@ class ML_Fraud:
                 f"before dropping the number of observations is: {len(tbl_year_OOS)}"
             )
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -4756,7 +4756,7 @@ class ML_Fraud:
 
             # deleting observations where a company appears both in IS and OOS
             # samples
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
             print(
                 f"after dropping the number of observations is: {len(tbl_year_OOS)}"
@@ -5173,7 +5173,7 @@ class ML_Fraud:
         reduced_tbl = pd.concat(reduced_tblset, axis=1)
         reduced_tbl = reduced_tbl.reset_index(drop=True)
 
-        if isfile("features_fk.pkl") == False:
+        if not isfile("features_fk.pkl"):
             print("No pickle file found ...")
             print("processing data to extract last years financial figures")
             t1 = datetime.now()
@@ -5207,7 +5207,7 @@ class ML_Fraud:
                 tbl_ratio_fk.fyear >= (sample_start - 1)
             ]
             init_size_tbl = len(tbl_ratio_fk)
-            tbl_ratio_fk = tbl_ratio_fk[tbl_ratio_fk.at_last.isna() == False]
+            tbl_ratio_fk = tbl_ratio_fk[~(tbl_ratio_fk.at_last.isna())]
             tbl_ratio_fk = tbl_ratio_fk.reset_index(drop=True)
             drop_for_missing = init_size_tbl / len(tbl_ratio_fk) - 1
             print(
@@ -5257,7 +5257,7 @@ class ML_Fraud:
             dt = round((datetime.now() - t1).total_seconds() / 60, 3)
             print("feature processing completed ...")
             print("elapsed time " + str(dt) + " mins")
-            if record_matrix == True:
+            if record_matrix:
                 DB_Dict = {"matrix": mapped_X, "lagged_Data": tbl_ratio_fk}
                 fl_name = "features_fk.pkl"
                 # Write into a file
@@ -5295,7 +5295,7 @@ class ML_Fraud:
         P_nf = 1 - P_f
         # optimize SVM grid
         if cv_type == "kfold":
-            if cross_val == True:
+            if cross_val:
                 print(
                     "Grid search hyperparameter optimisation started for "
                     "SVM-FK"
@@ -5343,7 +5343,7 @@ class ML_Fraud:
                 ratio = 1 / opt_params_svm_fk["class_weight"][0]
                 print(f"Cross-validation skipped ... Using C+/C-={ratio}")
         elif cv_type == "temp":
-            if cross_val == True:
+            if cross_val:
                 print(
                     "Grid search hyperparameter optimisation started for "
                     "SVM-FK"
@@ -5466,7 +5466,7 @@ class ML_Fraud:
             )
             tbl_year_OOS = tbl_ratio_fk.loc[tbl_ratio_fk.fyear == yr]
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -5475,7 +5475,7 @@ class ML_Fraud:
             else:
                 ok_index = np.ones(tbl_year_OOS.shape[0]).astype(bool)
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
 
             X = mapped_X[idx_IS, :]
             idx_real = np.where(
@@ -5683,7 +5683,7 @@ class ML_Fraud:
                 + "_temporal_SVM_FK.csv"
             )
 
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
         print(perf_tbl_general)
         t_last = datetime.now()
@@ -5776,7 +5776,7 @@ class ML_Fraud:
                 + str(OOS_gap)
                 + "_temporal_SVM_FK.csv"
             )
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
         ## End of analysis of 23 raw variables procedure as in Cecchini
@@ -5906,7 +5906,7 @@ class ML_Fraud:
         opt_params_svm_fk = {"class_weight": {0: 0.02, 1: 1}}
         score_svm = 0.595534973722555
 
-        if isfile("features_fk.pkl") == True:
+        if isfile("features_fk.pkl"):
             dict_db = pickle.load(open("features_fk.pkl", "r+b"))
             tbl_ratio_fk = dict_db["lagged_Data"]
             mapped_X = dict_db["matrix"]
@@ -6009,7 +6009,7 @@ class ML_Fraud:
                 if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
                     ok_index[s] = True
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X_OOS = tbl_year_OOS.iloc[:, -11:]
@@ -6055,7 +6055,7 @@ class ML_Fraud:
                 if not tbl_forward.iloc[s, 1] in misstate_firms:
                     ok_index_forward[s] = True
 
-            tbl_forward = tbl_forward.iloc[ok_index_forward == True, :]
+            tbl_forward = tbl_forward.iloc[ok_index_forward, :]
             tbl_forward = tbl_forward.reset_index(drop=True)
 
             forward_misstatement = tbl_forward.loc[tbl_forward.AAER_DUMMY == 1]
@@ -6608,7 +6608,7 @@ class ML_Fraud:
             f"serial={adjust_serial}.csv"
         )
 
-        if write == True:
+        if write:
             forward_tbl.to_csv(lbl_perf_tbl, index=False)
         print(forward_tbl)
         t_last = datetime.now()
@@ -6844,7 +6844,7 @@ class ML_Fraud:
                 )
             ]
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -6853,7 +6853,7 @@ class ML_Fraud:
             else:
                 ok_index = np.ones(tbl_year_OOS.shape[0]).astype(bool)
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
@@ -7073,7 +7073,7 @@ class ML_Fraud:
             + "_11ratios.csv"
         )
 
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
         print(perf_tbl_general)
         t_last = datetime.now()
@@ -7288,7 +7288,7 @@ class ML_Fraud:
                 )
             ]
 
-            if adjust_serial == True:
+            if adjust_serial:
                 ok_index = np.zeros(tbl_year_OOS.shape[0])
                 for s in range(0, tbl_year_OOS.shape[0]):
                     if not tbl_year_OOS.iloc[s, 1] in misstate_firms:
@@ -7296,7 +7296,7 @@ class ML_Fraud:
             else:
                 ok_index = np.ones(tbl_year_OOS.shape[0]).astype(bool)
 
-            tbl_year_OOS = tbl_year_OOS.iloc[ok_index == True, :]
+            tbl_year_OOS = tbl_year_OOS.iloc[ok_index, :]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
@@ -7520,7 +7520,7 @@ class ML_Fraud:
             + "_11ratios.csv"
         )
 
-        if write == True:
+        if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
         print(perf_tbl_general)
         t_last = datetime.now()
