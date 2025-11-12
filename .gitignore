@@ -1,1 +1,9 @@
 FraudDB2020.csv
+/__pycache__/
+*/__pycache__/
+*.pyc
+.DS_Store
+.env
+.vscode/
+.idea/
+logs/
