@@ -185,11 +185,8 @@ class ML_Fraud:
         fraud_df = fraud_df.reset_index(drop=True)
         num_comp = len(np.unique(fraud_df.gvkey))
         print(
-            str(num_comp)
-            + " unique firms in the dataset between "
-            + str(sample_start)
-            + " and "
-            + str(last_year)
+            f"{num_comp} unique firms in the dataset between "
+            f"{sample_start} and {last_year}"
         )
 
         reduced_tbl_ratio = fraud_df.iloc[:, -14:-3]
@@ -302,7 +299,7 @@ class ML_Fraud:
 
         print("graphics generated successfully ... ")
         run_time = datetime.now() - t0
-        print("Total runtime is " + str(run_time.total_seconds()) + " seconds")
+        print(f"Total runtime is {run_time.total_seconds()} seconds")
         ## End of Summary Statistics procedure
 
     def mc_analysis(self, B=1000, adjust_serial=None):
@@ -626,12 +623,7 @@ class ML_Fraud:
         result_tbl = result_tbl.transpose()
 
         lbl_perf_tbl = (
-            "MC_results"
-            + ",serial="
-            + str(adjust_serial)
-            + ",B="
-            + str(B)
-            + ".csv"
+            f"MC_results,serial={adjust_serial},B={B}.csv"
         )
 
         if write:
@@ -640,9 +632,7 @@ class ML_Fraud:
         t001 = datetime.now()
         dt00 = t001 - t000
         print(
-            "MC analysis is completed after "
-            + str(dt00.total_seconds())
-            + " seconds"
+            f"MC analysis is completed after {dt00.total_seconds()} seconds"
         )
 
         ## End of Monte Carlo simulation method
