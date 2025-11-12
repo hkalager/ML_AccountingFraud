@@ -192,16 +192,16 @@ class ML_Fraud:
 
         reduced_tbl_ratio = fraud_df.iloc[:, -14:-3]
         reduced_tbl_ratio = (
-            reduced_tbl_ratio - np.mean(reduced_tbl_ratio)
-        ) / np.std(reduced_tbl_ratio)
+            reduced_tbl_ratio.sub(reduced_tbl_ratio.mean())
+        ).div(reduced_tbl_ratio.std())
         vif_ratios = calc_vif(reduced_tbl_ratio)
         if write:
             vif_ratios.to_csv("VIF_11ratio.csv", index=False)
 
         reduced_tbl_raw28 = fraud_df.iloc[:, 9:-14]
         reduced_tbl_raw28 = (
-            reduced_tbl_raw28 - np.mean(reduced_tbl_raw28)
-        ) / np.std(reduced_tbl_raw28)
+            reduced_tbl_raw28.sub(reduced_tbl_raw28.mean())
+        ).div(reduced_tbl_raw28.std())
         vif_raw28 = calc_vif(reduced_tbl_raw28)
         if write:
             vif_raw28.to_csv("VIF_28raw.csv", index=False)
@@ -213,8 +213,8 @@ class ML_Fraud:
         reduced_tbl_raw23.pop("dltis")
         reduced_tbl_raw23.pop("sstk")
         reduced_tbl_raw23 = (
-            reduced_tbl_raw23 - np.mean(reduced_tbl_raw23)
-        ) / np.std(reduced_tbl_raw23)
+            reduced_tbl_raw23.sub(reduced_tbl_raw23.mean())
+        ).div(reduced_tbl_raw23.std())
         vif_raw23 = calc_vif(reduced_tbl_raw23)
         if write:
             vif_raw23.to_csv("VIF_23raw.csv", index=False)
@@ -225,19 +225,19 @@ class ML_Fraud:
         for sel_column in reduced_tbl_ratio.columns:
             sel_data = reduced_tbl_ratio[sel_column]
             sum_Stat_tbl.loc[itr, "variable"] = sel_column
-            sum_Stat_tbl.loc[itr, "min"] = round(np.min(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "max"] = round(np.max(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "mean"] = round(np.mean(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "std"] = round(np.std(sel_data), 4)
+            sum_Stat_tbl.loc[itr, "min"] = round(sel_data.min(), 4)
+            sum_Stat_tbl.loc[itr, "max"] = round(sel_data.max(), 4)
+            sum_Stat_tbl.loc[itr, "mean"] = round(sel_data.mean(), 4)
+            sum_Stat_tbl.loc[itr, "std"] = round(sel_data.std(), 4)
             itr += 1
 
         for sel_column in reduced_tbl_raw28.columns:
             sel_data = reduced_tbl_raw28[sel_column]
             sum_Stat_tbl.loc[itr, "variable"] = sel_column
-            sum_Stat_tbl.loc[itr, "min"] = round(np.min(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "max"] = round(np.max(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "mean"] = round(np.mean(sel_data), 4)
-            sum_Stat_tbl.loc[itr, "std"] = round(np.std(sel_data), 4)
+            sum_Stat_tbl.loc[itr, "min"] = round(sel_data.min(), 4)
+            sum_Stat_tbl.loc[itr, "max"] = round(sel_data.max(), 4)
+            sum_Stat_tbl.loc[itr, "mean"] = round(sel_data.mean(), 4)
+            sum_Stat_tbl.loc[itr, "std"] = round(sel_data.std(), 4)
             itr += 1
 
         if write:
@@ -261,7 +261,7 @@ class ML_Fraud:
             )
             tbl_year_OOS = fraud_df[fraud_df.fyear == yr]
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
-            fraud_count[m] = np.sum(tbl_year_OOS.AAER_DUMMY.values)
+            fraud_count[m] = tbl_year_OOS.AAER_DUMMY.sum()
             serial_fraud_count[m] = 0
             for s in range(0, tbl_year_OOS.shape[0]):
                 serial_case = np.logical_and(
@@ -301,7 +301,7 @@ class ML_Fraud:
         print("graphics generated successfully ... ")
         run_time = datetime.now() - t0
         print(f"Total runtime is {run_time.total_seconds()} seconds")
-        ## End of Summary Statistics procedure
+        # End of Summary Statistics procedure
 
     def mc_analysis(self, B=1000, adjust_serial=None):
         """
@@ -633,7 +633,7 @@ class ML_Fraud:
             f"MC analysis is completed after {dt00.total_seconds()} seconds"
         )
 
-        ## End of Monte Carlo simulation method
+        # End of Monte Carlo simulation method
 
     def analyse_ratio(self, C_FN=30, C_FP=1):
         """
@@ -720,9 +720,9 @@ class ML_Fraud:
 
         X_CV = tbl_year_IS_CV.iloc[:, -11:]
 
-        mean_vals = np.mean(X_CV)
-        std_vals = np.std(X_CV)
-        X_CV = (X_CV - mean_vals) / std_vals
+        mean_vals = X_CV.mean()
+        std_vals = X_CV.std()
+        X_CV = (X_CV.sub(mean_vals)).div(std_vals)
 
         Y_CV = tbl_year_IS_CV.AAER_DUMMY
 
@@ -749,7 +749,7 @@ class ML_Fraud:
                 }
                 base_tree = DecisionTreeClassifier(min_samples_leaf=5)
                 bao_RUSboost = RUSBoostClassifier(
-                    base_estimator=base_tree,
+                    estimator=base_tree,
                     sampling_strategy=1,
                     random_state=0,
                 )
@@ -1067,7 +1067,7 @@ class ML_Fraud:
                         temp_rusboost["learning_rate"].append(r)
                         base_tree = DecisionTreeClassifier(min_samples_leaf=5)
                         bao_RUSboost = RUSBoostClassifier(
-                            base_estimator=base_tree,
+                            estimator=base_tree,
                             sampling_strategy=1,
                             n_estimators=n,
                             learning_rate=r,
@@ -1224,9 +1224,9 @@ class ML_Fraud:
                             base_mdl_sgd = SGDClassifier(
                                 random_state=0,
                                 validation_fraction=0.2,
-                                                         shuffle=False,
-                                                         penalty=p,
-                                                         loss=l,
+                                shuffle=False,
+                                penalty=p,
+                                loss=l,
                                 class_weight=w,
                             ).fit(X_CV_train, Y_CV_train)
                             predicted_test_sgd = base_mdl_sgd.predict_proba(
@@ -1289,9 +1289,9 @@ class ML_Fraud:
                             random_state=0, solver="newton-cg"
                         )
                         base_mdl_ada = AdaBoostClassifier(
-                            base_estimator=base_lr,
-                                                          learning_rate=r,
-                                                          n_estimators=n,
+                            estimator=base_lr,
+                            learning_rate=r,
+                            n_estimators=n,
                             random_state=0,
                         ).fit(X_CV_train, Y_CV_train)
                         predicted_ada_test = base_mdl_ada.predict_proba(
@@ -1354,8 +1354,8 @@ class ML_Fraud:
                             base_mdl_mlp = MLPClassifier(
                                 random_state=0,
                                 validation_fraction=0.2,
-                                                         hidden_layer_sizes=h,
-                                                         solver=s,
+                                hidden_layer_sizes=h,
+                                solver=s,
                                 activation=a,
                             ).fit(X_CV_train, Y_CV_train)
                             predicted_mlp_test = base_mdl_mlp.predict_proba(
@@ -1541,13 +1541,13 @@ class ML_Fraud:
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
-            mean_vals = np.mean(X)
-            std_vals = np.std(X)
-            X = (X - mean_vals) / std_vals
+            mean_vals = X.mean()
+            std_vals = X.std()
+            X = (X.sub(mean_vals)).div(std_vals)
             Y = tbl_year_IS.AAER_DUMMY
 
             X_OOS = tbl_year_OOS.iloc[:, -11:]
-            X_OOS = (X_OOS - mean_vals) / std_vals
+            X_OOS = (X_OOS.sub(mean_vals)).div(std_vals)
 
             Y_OOS = tbl_year_OOS.AAER_DUMMY
             n_P = np.sum(Y_OOS == 1)
@@ -2590,7 +2590,7 @@ class ML_Fraud:
         if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
-        ## End of analysis of 11 ratios procedure
+        # End of analysis of 11 ratios procedure
 
     def analyse_raw(self, C_FN=30, C_FP=1):
         """
@@ -2641,7 +2641,7 @@ class ML_Fraud:
 
         t0 = datetime.now()
 
-        ## setting the parameters
+        # setting the parameters
 
         # IS_period=self.ip since the Bao approach is an expanding one
         IS_period = self.ip
@@ -2679,10 +2679,10 @@ class ML_Fraud:
         )
 
         X_CV = tbl_year_IS_CV.iloc[:, -28:]
-        ## Exception with SVM's inputs is due to SVM not converging otherwise
-        mean_vals = np.mean(X_CV)
-        std_vals = np.std(X_CV)
-        X_CV_SVM = (X_CV - mean_vals) / std_vals
+        # Exception with SVM's inputs is due to SVM not converging otherwise
+        mean_vals = X_CV.mean()
+        std_vals = X_CV.std()
+        X_CV_SVM = (X_CV.sub(mean_vals)).div(std_vals)
 
         Y_CV = tbl_year_IS_CV.AAER_DUMMY
 
@@ -3509,14 +3509,14 @@ class ML_Fraud:
 
             # Exception with SVM's inputs is due to SVM not converging
             # otherwise
-            mean_vals = np.mean(X)
-            std_vals = np.std(X)
-            X_SVM = (X - mean_vals) / std_vals
+            mean_vals = X.mean()
+            std_vals = X.std()
+            X_SVM = (X.sub(mean_vals)).div(std_vals)
 
             Y = tbl_year_IS.AAER_DUMMY
 
             X_OOS = tbl_year_OOS.iloc[:, -28:]
-            X_SVM_OOS = (X_OOS - mean_vals) / std_vals
+            X_SVM_OOS = (X_OOS.sub(mean_vals)).div(std_vals)
             Y_OOS = tbl_year_OOS.AAER_DUMMY
             n_P = np.sum(Y_OOS == 1)
             n_N = np.sum(Y_OOS == 0)
@@ -4533,7 +4533,7 @@ class ML_Fraud:
         if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
-        ## End of analysis of 28 raw variables procedure
+        # End of analysis of 28 raw variables procedure
 
     def analyse_rf(self, C_FN=30, C_FP=1):
         """
@@ -5082,7 +5082,7 @@ class ML_Fraud:
         t_last = datetime.now()
         dt_total = t_last - t0
         print("total run time is " + str(dt_total.total_seconds()) + " sec")
-        ## End of analysis of Random Forest procedure
+        # End of analysis of Random Forest procedure
 
     def analyse_fk(self, C_FN=30, C_FP=1, record_matrix=True):
         """
@@ -5767,7 +5767,7 @@ class ML_Fraud:
         if write:
             perf_tbl_general.to_csv(lbl_perf_tbl, index=False)
 
-        ## End of analysis of 23 raw variables procedure as in Cecchini
+        # End of analysis of 23 raw variables procedure as in Cecchini
 
     def analyse_forward(self, C_FN=30, C_FP=1):
         """
@@ -5861,11 +5861,11 @@ class ML_Fraud:
 
         # Cross-validation optimised parameters used below for the ratio-based
         # ML models.
-        ### RUSBOost 28
+        # RUSBOost 28
         n_opt_rus = 200
         r_opt_rus = 1e-5
 
-        ### Ratio-based ML models
+        # Ratio-based ML models
         opt_params_svm = {"class_weight": {0: 0.01, 1: 1}, "kernel": "linear"}
         C_opt = opt_params_svm["class_weight"][0]
         kernel_opt = opt_params_svm["kernel"]
@@ -5963,9 +5963,9 @@ class ML_Fraud:
             ]
             X = tbl_year_IS.iloc[:, -11:]
 
-            mean_vals = np.mean(X)
-            std_vals = np.std(X)
-            X = (X - mean_vals) / std_vals
+            mean_vals = X.mean()
+            std_vals = X.std()
+            X = (X.sub(mean_vals)).div(std_vals)
 
             X_rus = tbl_year_IS.iloc[:, -39:-11]
 
@@ -6001,7 +6001,7 @@ class ML_Fraud:
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X_OOS = tbl_year_OOS.iloc[:, -11:]
-            X_OOS = (X_OOS - mean_vals) / std_vals
+            X_OOS = (X_OOS.sub(mean_vals)).div(std_vals)
 
             X_rus_OOS = tbl_year_OOS.iloc[:, -39:-11]
 
@@ -6603,7 +6603,7 @@ class ML_Fraud:
         dt_total = t_last - t0
         print("total run time is " + str(dt_total.total_seconds()) + " sec")
 
-        ## End of foreward looking analysis
+        # End of foreward looking analysis
 
     def compare_ada(self, C_FN=30, C_FP=1):
         """
@@ -6679,9 +6679,9 @@ class ML_Fraud:
 
         X_CV = tbl_year_IS_CV.iloc[:, -11:]
 
-        mean_vals = np.mean(X_CV)
-        std_vals = np.std(X_CV)
-        X_CV = (X_CV - mean_vals) / std_vals
+        mean_vals = X_CV.mean()
+        std_vals = X_CV.std()
+        X_CV = (X_CV.sub(mean_vals)).div(std_vals)
 
         Y_CV = tbl_year_IS_CV.AAER_DUMMY
 
@@ -6845,13 +6845,13 @@ class ML_Fraud:
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
-            mean_vals = np.mean(X)
-            std_vals = np.std(X)
-            X = (X - mean_vals) / std_vals
+            mean_vals = X.mean()
+            std_vals = X.std()
+            X = (X.sub(mean_vals)).div(std_vals)
             Y = tbl_year_IS.AAER_DUMMY
 
             X_OOS = tbl_year_OOS.iloc[:, -11:]
-            X_OOS = (X_OOS - mean_vals) / std_vals
+            X_OOS = (X_OOS.sub(mean_vals)).div(std_vals)
 
             Y_OOS = tbl_year_OOS.AAER_DUMMY
 
@@ -7068,7 +7068,7 @@ class ML_Fraud:
         dt_total = t_last - t0
         print("total run time is " + str(dt_total.total_seconds()) + " sec")
 
-        ## End of comparative procedure for AdaBoost
+        # End of comparative procedure for AdaBoost
 
     def compare_logit(self, C_FN=30, C_FP=1):
         """
@@ -7145,9 +7145,9 @@ class ML_Fraud:
 
         X_CV = tbl_year_IS_CV.iloc[:, -11:]
 
-        mean_vals = np.mean(X_CV)
-        std_vals = np.std(X_CV)
-        X_CV = (X_CV - mean_vals) / std_vals
+        mean_vals = X_CV.mean()
+        std_vals = X_CV.std()
+        X_CV = (X_CV.sub(mean_vals)).div(std_vals)
 
         Y_CV = tbl_year_IS_CV.AAER_DUMMY
 
@@ -7288,13 +7288,13 @@ class ML_Fraud:
             tbl_year_OOS = tbl_year_OOS.reset_index(drop=True)
 
             X = tbl_year_IS.iloc[:, -11:]
-            mean_vals = np.mean(X)
-            std_vals = np.std(X)
-            X = (X - mean_vals) / std_vals
+            mean_vals = X.mean()
+            std_vals = X.std()
+            X = (X.sub(mean_vals)).div(std_vals)
             Y = tbl_year_IS.AAER_DUMMY
 
             X_OOS = tbl_year_OOS.iloc[:, -11:]
-            X_OOS = (X_OOS - mean_vals) / std_vals
+            X_OOS = (X_OOS.sub(mean_vals)).div(std_vals)
 
             Y_OOS = tbl_year_OOS.AAER_DUMMY
 
@@ -7514,4 +7514,4 @@ class ML_Fraud:
         t_last = datetime.now()
         dt_total = t_last - t0
         print("total run time is " + str(dt_total.total_seconds()) + " sec")
-        ## End of comparative procedure
+        # End of comparative procedure
