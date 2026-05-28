@@ -335,7 +335,7 @@ class ML_Fraud:
         start_OOS_year = self.ts[0]
         end_OOS_year = self.ts[-1]
         sample_start = self.ss
-        if adjust_serial == None:
+        if adjust_serial is None:
             adjust_serial = self.a_s
         cross_val = self.cv
         case_window = self.sa

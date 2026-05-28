@@ -18,7 +18,7 @@ def _main():
     # a.mc_analysis(adjust_serial=False)
 
     a = mf(cv_flag=False, adjust_serial=True)
-    a.analyse_raw()
+    # a.analyse_raw()
     a.analyse_ratio()
     a.analyse_fk()
 

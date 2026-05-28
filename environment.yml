@@ -20,5 +20,5 @@ dependencies:
   - pip:
     - -e .
 
-# If you need additional pip-only packages, add them under a pip: section or
-# keep a `requirements.txt` and install with pip inside the conda env.
+# If you add pip-only dependencies later, list them here so conda remains the
+# source of truth for development environment setup.
