@@ -1,0 +1,13 @@
+{
+    "python-envs.defaultEnvManager": "ms-python.python:conda",
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "python.defaultInterpreterPath": "/Users/arman/anaconda3/envs/ml-fraud/bin/python",
+    "python.terminal.executeInFileDir": true,
+    "terminal.integrated.env.osx": {
+        "CONDA_PREFIX": "/Users/arman/anaconda3/envs/ml-fraud"
+    },
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.python",
+        "editor.formatOnSave": true
+    }
+}

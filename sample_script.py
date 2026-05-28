@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Spyder Editor
+This is a sample script file for testing the MLFraud_module. 
+You can run this script to see how the module works and to test its functionality. 
 
-This is a temporary script file.
+You can modify the code as needed to fit your specific use case.
+
+(c) Arman Hassanniakalager
 """
 
 from MLFraud_module import ML_Fraud as mf
@@ -14,10 +17,10 @@ def _main():
     # a.mc_analysis(adjust_serial=True)
     # a.mc_analysis(adjust_serial=False)
 
-    a = mf(cv_type='kfold', cv_flag=False, adjust_serial=True)
+    a = mf(cv_flag=False, adjust_serial=True)
     a.analyse_raw()
-    # a.analyse_ratio()
-    # a.analyse_fk()
+    a.analyse_ratio()
+    a.analyse_fk()
 
     # a=mf(cv_type='temp',cv_flag=False,adjust_serial=True)
     # a.analyse_raw()

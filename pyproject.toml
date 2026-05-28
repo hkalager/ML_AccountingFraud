@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ML_AccountingFraud"
-version = "0.0.0"
+version = "1.0.0"
 description = "Machine learning models and evaluation code for accounting fraud detection"
 authors = [ { name = "Arman Hassanniakalager", url = "https://github.com/hkalager" } ]
 dynamic = ["dependencies"]

@@ -4,6 +4,5 @@ FraudDB2020.csv
 *.pyc
 .DS_Store
 .env
-.vscode/
 .idea/
 logs/
