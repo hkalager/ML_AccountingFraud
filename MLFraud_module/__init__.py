@@ -1366,7 +1366,7 @@ class ML_Fraud:
                             )
 
                 idx_opt = temp_mlp["score"].index(np.max(temp_mlp["score"]))
-
+  
                 score_mlp = temp_mlp["score"][idx_opt]
                 opt_params_mlp = {
                     "hidden_layer_sizes": temp_mlp["hidden_layer_sizes"][
